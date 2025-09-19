@@ -54,6 +54,10 @@ export default function GameCanvas({ gameData, onScoreSubmit, gameTitle }: GameC
         width: gameData.config.width,
         height: gameData.config.height,
         parent: canvasRef.current,
+        scale: {
+          mode: Phaser.Scale.FIT,
+          autoCenter: Phaser.Scale.CENTER_BOTH,
+        },
         physics: gameData.config.physics ? {
           default: 'arcade',
           arcade: {

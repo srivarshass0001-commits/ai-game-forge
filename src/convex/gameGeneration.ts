@@ -105,7 +105,21 @@ export const generateGame = action({
     // Simulate AI processing time
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // Generate game based on parameters
+    // NEW: Always honor explicit prompt intents (e.g., Tic Tac Toe) regardless of selected genre
+    const p = args.prompt.toLowerCase();
+    const isTicTacToe =
+      p.includes("tic tac toe") ||
+      p.includes("tictactoe") ||
+      p.includes("tic-tac-toe") ||
+      p.includes("noughts and crosses") ||
+      p.includes("x and o") ||
+      p.includes("x&o");
+
+    if (isTicTacToe) {
+      return generateTicTacToeGame(args.prompt, args.parameters);
+    }
+
+    // Generate game based on parameters (fallback to genre)
     const gameTemplates = {
       platformer: generatePlatformerGame,
       shooter: generateShooterGame,
