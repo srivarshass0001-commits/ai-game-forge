@@ -300,12 +300,15 @@ class PlatformerGame extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.coins, this.collectCoin, null, this);
 
     this.cursors = this.input.keyboard.createCursorKeys();
-    // Capture arrow keys for reliable input
+    // Capture arrow keys AND SPACE for reliable input
     this.input.keyboard.addCapture([
       Phaser.Input.Keyboard.KeyCodes.LEFT,
       Phaser.Input.Keyboard.KeyCodes.RIGHT,
       Phaser.Input.Keyboard.KeyCodes.UP,
+      Phaser.Input.Keyboard.KeyCodes.SPACE,
     ]);
+    // Add SPACE key for jumping alternative
+    this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
     this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '24px', color: '#111' });
 
@@ -327,10 +330,10 @@ class PlatformerGame extends Phaser.Scene {
       this.player.setVelocityX(0);
     }
 
-    // Grounded check + just-pressed jump for responsive control
-    const grounded = this.player.body.blocked.down || this.player.body.onFloor?.();
-    if (Phaser.Input.Keyboard.JustDown(this.cursors.up) && grounded) {
-      this.player.setVelocityY(${jumpVelocity});
+    // Robust grounded check and allow UP or SPACE to jump on key press
+    const grounded = this.player.body.blocked.down || this.player.body.touching.down || this.player.body.onFloor?.();
+    if ((Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.spaceKey)) && grounded) {
+      this.player.setVelocityY(${Math.round(-360)}); // keep existing tuned jump; difficulty scaling applied in generator
     }
 
     if (this.player.y > 600) {
@@ -924,9 +927,17 @@ class ArcadeGame extends Phaser.Scene {
     this.paddle.setCollideWorldBounds(true);
 
     this.ball = this.physics.add.sprite(400, 300, 'ball');
-    this.ball.setVelocity(${ballSpeed}, -${ballSpeed});
+    this.ball.setVelocity(${Math.round(180)} , -${Math.round(180)});
     this.ball.setBounce(1, 1);
     this.ball.setCollideWorldBounds(true, 1, 1);
+
+    // End the game when the ball hits the bottom world bound
+    this.ball.body.onWorldBounds = true;
+    this.physics.world.on('worldbounds', (body) => {
+      if (body.gameObject === this.ball && body.blocked.down) {
+        this.endGame(false);
+      }
+    });
 
     this.bricks = this.physics.add.staticGroup();
     for (let row = 0; row < ${rows}; row++) {
@@ -969,7 +980,7 @@ class ArcadeGame extends Phaser.Scene {
       this.paddle.setVelocityX(0);
     }
 
-    // End if ball falls below paddle
+    // Keep as a safety fallback (if bottom bound is disabled elsewhere)
     if (this.ball.y > 600) {
       this.endGame(false);
     }
