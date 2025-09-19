@@ -142,8 +142,14 @@ function isHumanCharacterRequested(prompt: string, overrides?: { humanCharacter?
   );
 }
 
-// Add: Optional LLM-assisted classifier via OpenRouter. Safe – only returns structured metadata, not executable code.
-async function llmAnalyzePrompt(prompt: string, parameters: any): Promise<{
+/**
+ * Temporarily disable external LLM parsing to ensure build stability.
+ * Deterministic analyzer will be used instead. We can re-enable a robust parser later.
+ */
+async function llmAnalyzePrompt(
+  prompt: string,
+  parameters: any
+): Promise<{
   gameType?: "runner" | "platformer" | "shooter" | "puzzle" | "arcade" | "tictactoe";
   humanCharacter?: boolean;
   theme?: string;
@@ -151,65 +157,7 @@ async function llmAnalyzePrompt(prompt: string, parameters: any): Promise<{
   densityFactor?: number;
   difficultyScale?: number;
 } | null> {
-  try {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) return null;
-
-    const { default: OpenAI } = await import("openai");
-    const openai = new OpenAI({
-      apiKey,
-      baseURL: "https://openrouter.ai/api/v1",
-      defaultHeaders: {
-        "X-Title": "PromptPlay",
-      },
-    });
-
-    const sys = [
-      "You classify a short game prompt into a JSON with fields:",
-      "{",
-      '"gameType": one of ["runner","platformer","shooter","puzzle","arcade","tictactoe"],',
-      '"humanCharacter": boolean (true if the prompt asks for a human and it should be a lively cartoon kid),',
-      '"theme": short theme string (e.g. space, fantasy, cyberpunk, nature, retro, ocean, neon, candy, sunset, pastel, forest, desert, city),',
-      '"speedFactor": number in [0.6, 1.6],',
-      '"densityFactor": number in [0.6, 1.6],',
-      '"difficultyScale": number in [0.6, 1.6]',
-      "}",
-      "Rules:",
-      "- Prefer 'runner' when user asks for running/endless/dash.",
-      "- Prefer 'tictactoe' when mentioned.",
-      "- Only return raw JSON. No markdown, no commentary.",
-    ].join("\n");
-
-    const userContent = JSON.stringify({ prompt, parameters });
-
-    const completion = await openai.chat.completions.create({
-      model: "anthropic/claude-3-haiku",
-      messages: [
-        { role: "system", content: sys },
-        { role: "user", content: userContent },
-      ],
-      temperature: 0.2,
-      max_tokens: 300,
-    });
-
-    // Fix: robustly parse JSON from raw text or fenced code block
-    const raw = completion.choices?.[0]?.message?.content ?? "";
-    const text = typeof raw === "string" ? raw.trim() : "";
-    let jsonStr = text;
-
-    // Prefer fenced code block content if present
-    const fenceMatch = text.match(/
-    \s*`.*\s*`/gm, "").trim();
-    
-    try {
-      return JSON.parse(jsonStr);
-    } catch (e) {
-      return null;
-    }
-  } catch (e) {
-    console.error("LLM analysis failed:", e);
-    return null;
-  }
+  return null;
 }
 
 // Mock AI game generation - in a real app, this would call OpenAI/Claude

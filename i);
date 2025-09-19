@@ -1,18 +1,22 @@
-    if (fenceMatch && fenceMatch[1]) {
-      jsonStr = fenceMatch[1].trim();
-    }
+if (fenceMatch && fenceMatch[1]) {
+  jsonStr = fenceMatch[1].trim();
+} else {
+  // Fallback: best-effort JSON extraction via braces
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) {
+    jsonStr = text.slice(start, end + 1).trim();
+  }
+}
 
-    // As a fallback, try to extract the first JSON object in the text
-    if (!jsonStr.trim().startsWith("{")) {
-      const braceMatch = text.match(/\{[\s\S]*\}/);
-      if (braceMatch) {
-        jsonStr = braceMatch[0];
-      }
-    }
+try {
+  return JSON.parse(jsonStr);
+} catch {
+  return null;
+}
+} catch (e) {
+  console.error("LLM analysis failed:", e);
+  return null;
+}
 
-    try {
-      return JSON.parse(jsonStr);
-    } catch {
-      return null;
-    }
-// ... keep existing code (rest of llmAnalyzePrompt and the file)
+// ... keep existing code (generateGame, generators for Platformer, Shooter, Puzzle/TicTacToe, Arcade, Runner)
