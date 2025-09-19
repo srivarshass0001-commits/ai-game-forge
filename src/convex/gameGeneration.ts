@@ -4,6 +4,92 @@ import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 
+// Add: prompt analysis utilities for deterministic, prompt-driven tuning
+function hashPrompt(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+type ThemeKey = "space" | "fantasy" | "cyberpunk" | "nature" | "retro" | "default";
+
+function pickThemeColor(theme: string): number {
+  const t = theme.toLowerCase();
+  if (t.includes("space")) return 0x4a90e2;      // blue
+  if (t.includes("fantasy")) return 0x8e44ad;    // purple
+  if (t.includes("cyber")) return 0x00ffff;      // cyan
+  if (t.includes("nature")) return 0x2ecc71;     // green
+  if (t.includes("retro")) return 0xff6b6b;      // red
+  return 0x4a90e2;
+}
+
+function difficultyScaleOf(diff: string): number {
+  const d = diff.toLowerCase();
+  if (d === "easy") return 0.75;
+  if (d === "medium") return 1.0;
+  if (d === "hard") return 1.25;
+  if (d === "expert") return 1.5;
+  return 1.0;
+}
+
+function analyzePrompt(prompt: string, parameters: any) {
+  const h = hashPrompt(prompt);
+  const pLower = prompt.toLowerCase();
+
+  // Base factors from difficulty
+  let difficultyScale = difficultyScaleOf(parameters?.difficulty ?? "medium");
+
+  // Prompt hints
+  if (pLower.includes("brutal") || pLower.includes("insane") || pLower.includes("hard")) {
+    difficultyScale *= 1.15;
+  }
+  if (pLower.includes("chill") || pLower.includes("casual") || pLower.includes("easy")) {
+    difficultyScale *= 0.9;
+  }
+
+  // Speed & density factors derived from hash + keywords
+  let speedFactor = 0.8 + ((h % 41) / 100); // 0.8 - 1.21 range
+  let densityFactor = 0.8 + (((Math.floor(h / 7)) % 41) / 100);
+  if (pLower.includes("fast") || pLower.includes("speed") || pLower.includes("rapid")) speedFactor *= 1.15;
+  if (pLower.includes("slow") || pLower.includes("relax")) speedFactor *= 0.9;
+  if (pLower.includes("many") || pLower.includes("tons") || pLower.includes("swarm")) densityFactor *= 1.2;
+  if (pLower.includes("few") || pLower.includes("minimal")) densityFactor *= 0.85;
+
+  speedFactor = clamp(speedFactor, 0.6, 1.6);
+  densityFactor = clamp(densityFactor, 0.6, 1.6);
+
+  // Theme color from parameters or prompt
+  const themeText = parameters?.theme ?? "";
+  const themeFromPrompt =
+    pLower.includes("space") ? "space" :
+    pLower.includes("forest") || pLower.includes("nature") ? "nature" :
+    pLower.includes("retro") ? "retro" :
+    pLower.includes("fantasy") ? "fantasy" :
+    pLower.includes("cyber") ? "cyberpunk" :
+    themeText;
+
+  const mainColor = pickThemeColor(themeFromPrompt);
+
+  // Duration can map to level length/density slightly
+  const duration = clamp(parameters?.duration ?? 5, 1, 15);
+  const durationFactor = clamp(0.9 + (duration - 5) * 0.03, 0.7, 1.3);
+
+  return {
+    difficultyScale,
+    speedFactor,
+    densityFactor: clamp(densityFactor * durationFactor, 0.6, 1.8),
+    mainColor,
+    theme: themeFromPrompt || "default",
+  };
+}
+
 // Mock AI game generation - in a real app, this would call OpenAI/Claude
 export const generateGame = action({
   args: {
@@ -35,6 +121,15 @@ export const generateGame = action({
 });
 
 function generatePlatformerGame(prompt: string, parameters: any) {
+  // New: tune from prompt
+  const tuning = analyzePrompt(prompt, parameters);
+  const playerColor = tuning.mainColor;           // player color
+  const platformColor = 0x8b4513;                 // keep wood-like
+  const coinColor = 0xffd700;                     // gold
+  const coinRepeat = Math.max(6, Math.round(11 * tuning.densityFactor));
+  const stepX = clamp(Math.round(70 / clamp(tuning.densityFactor, 0.7, 1.5)), 40, 100);
+  const jumpVelocity = Math.round(-260 * tuning.difficultyScale); // higher magnitude = higher jump
+
   return {
     code: `
 class PlatformerGame extends Phaser.Scene {
@@ -45,19 +140,19 @@ class PlatformerGame extends Phaser.Scene {
   }
 
   preload() {
-    // Create colored rectangles as sprites
+    // Create colored rectangles as sprites based on theme
     this.add.graphics()
-      .fillStyle(0x4A90E2)
+      .fillStyle(${playerColor})
       .fillRect(0, 0, 32, 32)
       .generateTexture('player', 32, 32);
     
     this.add.graphics()
-      .fillStyle(0x8B4513)
+      .fillStyle(${platformColor})
       .fillRect(0, 0, 64, 32)
       .generateTexture('platform', 64, 32);
     
     this.add.graphics()
-      .fillStyle(0xFFD700)
+      .fillStyle(${coinColor})
       .fillCircle(16, 16, 16)
       .generateTexture('coin', 32, 32);
   }
@@ -76,11 +171,11 @@ class PlatformerGame extends Phaser.Scene {
     this.player.setCollideWorldBounds(true);
     this.physics.add.collider(this.player, this.platforms);
 
-    // Create coins
+    // Create coins (density from prompt)
     this.coins = this.physics.add.group({
       key: 'coin',
-      repeat: 11,
-      setXY: { x: 12, y: 0, stepX: 70 }
+      repeat: ${coinRepeat},
+      setXY: { x: 12, y: 0, stepX: ${stepX} }
     });
 
     this.coins.children.entries.forEach(child => {
@@ -96,7 +191,7 @@ class PlatformerGame extends Phaser.Scene {
     // Score text
     this.scoreText = this.add.text(16, 16, 'Score: 0', {
       fontSize: '32px',
-      color: '#000'
+      color: '#fff'
     });
 
     // Game over text
@@ -118,10 +213,9 @@ class PlatformerGame extends Phaser.Scene {
     }
 
     if (this.cursors.up.isDown && this.player.body.touching.down) {
-      this.player.setVelocityY(-330);
+      this.player.setVelocityY(${jumpVelocity});
     }
 
-    // Check if player fell off the world
     if (this.player.y > 600) {
       this.endGame();
     }
@@ -147,7 +241,6 @@ class PlatformerGame extends Phaser.Scene {
       this.gameOverText.setText('Game Over!\\nScore: ' + this.score);
     }
 
-    // Emit score for leaderboard
     this.game.events.emit('gameEnd', this.score);
   }
 }`,
@@ -165,6 +258,14 @@ class PlatformerGame extends Phaser.Scene {
 }
 
 function generateShooterGame(prompt: string, parameters: any) {
+  // New: tune from prompt
+  const tuning = analyzePrompt(prompt, parameters);
+  const playerColor = 0x00ff00;
+  const enemyColor = tuning.mainColor;
+  const bulletColor = 0xffff00;
+  const baseEnemySpeed = Math.round(40 * tuning.speedFactor * tuning.difficultyScale + 30);
+  const spawnDelayMs = clamp(Math.round(1100 / clamp(tuning.densityFactor, 0.7, 1.5)), 450, 1400);
+
   return {
     code: `
 class ShooterGame extends Phaser.Scene {
@@ -172,58 +273,51 @@ class ShooterGame extends Phaser.Scene {
     super({ key: 'ShooterGame' });
     this.score = 0;
     this.gameOver = false;
-    this.enemySpeed = 50;
+    this.enemySpeed = ${baseEnemySpeed};
   }
 
   preload() {
     this.add.graphics()
-      .fillStyle(0x00FF00)
+      .fillStyle(${playerColor})
       .fillRect(0, 0, 32, 32)
       .generateTexture('player', 32, 32);
     
     this.add.graphics()
-      .fillStyle(0xFF0000)
+      .fillStyle(${enemyColor})
       .fillRect(0, 0, 24, 24)
       .generateTexture('enemy', 24, 24);
     
     this.add.graphics()
-      .fillStyle(0xFFFF00)
+      .fillStyle(${bulletColor})
       .fillRect(0, 0, 8, 16)
       .generateTexture('bullet', 8, 16);
   }
 
   create() {
-    // Create player
     this.player = this.physics.add.sprite(400, 550, 'player');
     this.player.setCollideWorldBounds(true);
 
-    // Create groups
     this.bullets = this.physics.add.group();
     this.enemies = this.physics.add.group();
 
-    // Controls
     this.cursors = this.input.keyboard.createCursorKeys();
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-    // Spawn enemies
     this.enemyTimer = this.time.addEvent({
-      delay: 1000,
+      delay: ${spawnDelayMs},
       callback: this.spawnEnemy,
       callbackScope: this,
       loop: true
     });
 
-    // Collisions
     this.physics.add.overlap(this.bullets, this.enemies, this.hitEnemy, null, this);
     this.physics.add.overlap(this.player, this.enemies, this.hitPlayer, null, this);
 
-    // Score text
     this.scoreText = this.add.text(16, 16, 'Score: 0', {
       fontSize: '32px',
       color: '#fff'
     });
 
-    // Game over text
     this.gameOverText = this.add.text(400, 300, '', {
       fontSize: '64px',
       color: '#ff0000'
@@ -233,49 +327,38 @@ class ShooterGame extends Phaser.Scene {
   update() {
     if (this.gameOver) return;
 
-    // Player movement
     if (this.cursors.left.isDown) {
-      this.player.setVelocityX(-200);
+      this.player.setVelocityX(-220);
     } else if (this.cursors.right.isDown) {
-      this.player.setVelocityX(200);
+      this.player.setVelocityX(220);
     } else {
       this.player.setVelocityX(0);
     }
 
-    // Shooting
     if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
       this.shoot();
     }
 
-    // Clean up bullets
     this.bullets.children.entries.forEach(bullet => {
-      if (bullet.y < 0) {
-        bullet.destroy();
-      }
+      if (bullet.y < 0) bullet.destroy();
     });
 
-    // Clean up enemies
     this.enemies.children.entries.forEach(enemy => {
-      if (enemy.y > 600) {
-        enemy.destroy();
-      }
+      if (enemy.y > 600) enemy.destroy();
     });
   }
 
   shoot() {
     const bullet = this.bullets.create(this.player.x, this.player.y - 20, 'bullet');
-    bullet.setVelocityY(-400);
+    bullet.setVelocityY(-450);
   }
 
   spawnEnemy() {
     if (this.gameOver) return;
-    
     const x = Phaser.Math.Between(50, 750);
     const enemy = this.enemies.create(x, 0, 'enemy');
     enemy.setVelocityY(this.enemySpeed);
-    
-    // Increase difficulty over time
-    this.enemySpeed += 2;
+    this.enemySpeed += 2; // small ramp-up over time
   }
 
   hitEnemy(bullet, enemy) {
@@ -285,7 +368,7 @@ class ShooterGame extends Phaser.Scene {
     this.scoreText.setText('Score: ' + this.score);
   }
 
-  hitPlayer(player, enemy) {
+  hitPlayer() {
     this.endGame();
   }
 
@@ -293,7 +376,6 @@ class ShooterGame extends Phaser.Scene {
     this.gameOver = true;
     this.physics.pause();
     this.enemyTimer.destroy();
-    
     this.gameOverText.setText('Game Over!\\nScore: ' + this.score);
     this.game.events.emit('gameEnd', this.score);
   }
@@ -474,6 +556,15 @@ class PuzzleGame extends Phaser.Scene {
 }
 
 function generateArcadeGame(prompt: string, parameters: any) {
+  // New: tune from prompt
+  const tuning = analyzePrompt(prompt, parameters);
+  const paddleColor = tuning.mainColor;
+  const ballColor = 0xffffff;
+  const brickColor = 0xff6b6b;
+  const ballSpeed = Math.round(180 * tuning.speedFactor * tuning.difficultyScale);
+  const rows = clamp(Math.round(5 * tuning.densityFactor), 3, 8);
+  const cols = clamp(Math.round(10 * clamp(tuning.densityFactor, 0.8, 1.4)), 7, 12);
+
   return {
     code: `
 class ArcadeGame extends Phaser.Scene {
@@ -481,68 +572,60 @@ class ArcadeGame extends Phaser.Scene {
     super({ key: 'ArcadeGame' });
     this.score = 0;
     this.gameOver = false;
-    this.ballSpeed = 200;
+    this.ballSpeed = ${ballSpeed};
   }
 
   preload() {
     this.add.graphics()
-      .fillStyle(0x4A90E2)
+      .fillStyle(${paddleColor})
       .fillRect(0, 0, 100, 20)
       .generateTexture('paddle', 100, 20);
     
     this.add.graphics()
-      .fillStyle(0xFFFFFF)
+      .fillStyle(${ballColor})
       .fillCircle(10, 10, 10)
       .generateTexture('ball', 20, 20);
     
     this.add.graphics()
-      .fillStyle(0xFF6B6B)
+      .fillStyle(${brickColor})
       .fillRect(0, 0, 75, 30)
       .generateTexture('brick', 75, 30);
   }
 
   create() {
-    // Create paddle
     this.paddle = this.physics.add.sprite(400, 550, 'paddle');
     this.paddle.setImmovable(true);
     this.paddle.setCollideWorldBounds(true);
 
-    // Create ball
     this.ball = this.physics.add.sprite(400, 300, 'ball');
     this.ball.setVelocity(this.ballSpeed, -this.ballSpeed);
     this.ball.setBounce(1);
     this.ball.setCollideWorldBounds(true);
 
-    // Create bricks
     this.bricks = this.physics.add.staticGroup();
-    for (let row = 0; row < 5; row++) {
-      for (let col = 0; col < 10; col++) {
+    for (let row = 0; row < ${rows}; row++) {
+      for (let col = 0; col < ${cols}; col++) {
         const x = 80 + col * 80;
         const y = 80 + row * 40;
         this.bricks.create(x, y, 'brick');
       }
     }
 
-    // Collisions
     this.physics.add.collider(this.ball, this.paddle, this.hitPaddle, null, this);
     this.physics.add.collider(this.ball, this.bricks, this.hitBrick, null, this);
 
-    // Controls
     this.cursors = this.input.keyboard.createCursorKeys();
 
-    // Score text
     this.scoreText = this.add.text(16, 16, 'Score: 0', {
       fontSize: '32px',
       color: '#fff'
     });
 
-    // Game over text
     this.gameOverText = this.add.text(400, 300, '', {
       fontSize: '64px',
       color: '#ff0000'
     }).setOrigin(0.5);
 
-    // Ball out of bounds
     this.ball.body.onWorldBounds = true;
     this.physics.world.on('worldbounds', (event, body) => {
       if (body.gameObject === this.ball && event.down) {
@@ -554,7 +637,6 @@ class ArcadeGame extends Phaser.Scene {
   update() {
     if (this.gameOver) return;
 
-    // Paddle movement
     if (this.cursors.left.isDown) {
       this.paddle.setVelocityX(-300);
     } else if (this.cursors.right.isDown) {
@@ -565,7 +647,6 @@ class ArcadeGame extends Phaser.Scene {
   }
 
   hitPaddle(ball, paddle) {
-    // Add some randomness to ball direction
     const diff = ball.x - paddle.x;
     ball.setVelocityX(diff * 5);
   }
@@ -575,7 +656,6 @@ class ArcadeGame extends Phaser.Scene {
     this.score += 10;
     this.scoreText.setText('Score: ' + this.score);
 
-    // Increase ball speed slightly
     this.ballSpeed += 5;
     const currentVel = ball.body.velocity;
     const magnitude = Math.sqrt(currentVel.x * currentVel.x + currentVel.y * currentVel.y);
@@ -584,7 +664,6 @@ class ArcadeGame extends Phaser.Scene {
       (currentVel.y / magnitude) * this.ballSpeed
     );
 
-    // Check win condition
     if (this.bricks.countActive() === 0) {
       this.endGame(true);
     }
@@ -593,13 +672,11 @@ class ArcadeGame extends Phaser.Scene {
   endGame(won = false) {
     this.gameOver = true;
     this.physics.pause();
-    
     if (won) {
       this.gameOverText.setText('You Win!\\nScore: ' + this.score);
     } else {
       this.gameOverText.setText('Game Over!\\nScore: ' + this.score);
     }
-
     this.game.events.emit('gameEnd', this.score);
   }
 }`,
