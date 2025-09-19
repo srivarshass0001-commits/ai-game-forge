@@ -88,8 +88,10 @@ export const getUserBestScores = query({
 export const getGlobalLeaderboard = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
+    // Use global score index to fetch top scores across all games
     const entries = await ctx.db
       .query("leaderboard")
+      .withIndex("by_score_global")
       .order("desc")
       .take(args.limit ?? 20);
 

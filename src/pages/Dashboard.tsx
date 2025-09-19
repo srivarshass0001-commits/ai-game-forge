@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
+import { useMemo } from 'react';
 
 import GameCreator from '@/components/GameCreator';
 import GameCanvas from '@/components/GameCanvas';
@@ -27,8 +28,13 @@ export default function Dashboard() {
     id?: Id<"games">;
   } | null>(null);
 
+  // Track a sessionId tied to the current game to save progress
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
   const createGame = useMutation(api.games.createGame);
   const submitScore = useMutation(api.leaderboard.submitScore);
+  const startGameSession = useMutation(api.gameSessions.startGameSession);
+  const endGameSession = useMutation(api.gameSessions.endGameSession);
 
   useEffect(() => {
     // Add some floating particles for ambiance
@@ -86,6 +92,16 @@ export default function Dashboard() {
         parameters,
         id: gameId,
       });
+
+      // Start a session for this saved game to persist progress
+      try {
+        const sid = (crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).toString();
+        await startGameSession({ gameId, sessionId: sid });
+        setSessionId(sid);
+      } catch (e) {
+        console.warn('Failed to start session (non-blocking):', e);
+      }
+
       setActiveTab('play');
       toast.success('Game created and ready to play!');
     } catch (error) {
@@ -111,6 +127,18 @@ export default function Dashboard() {
         parameters: game.parameters,
         id: game._id,
       });
+
+      // Start a session only if this is a saved game (has id)
+      if (game._id) {
+        try {
+          const sid = (crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).toString();
+          await startGameSession({ gameId: game._id, sessionId: sid });
+          setSessionId(sid);
+        } catch (e) {
+          console.warn('Failed to start session (non-blocking):', e);
+        }
+      }
+
       setActiveTab('play');
     } catch (e) {
       console.error(e);
@@ -130,6 +158,18 @@ export default function Dashboard() {
         score,
         timeElapsed: Date.now(),
       });
+
+      // End the session if one is active
+      if (sessionId) {
+        try {
+          await endGameSession({ sessionId, finalScore: score });
+        } catch (e) {
+          console.warn('Failed to end session (non-blocking):', e);
+        } finally {
+          setSessionId(null);
+        }
+      }
+
       toast.success('Score submitted successfully!');
     } catch (error) {
       console.error('Failed to submit score:', error);

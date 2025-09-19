@@ -73,7 +73,8 @@ const schema = defineSchema(
       })),
     }).index("by_game", ["gameId"])
       .index("by_user", ["userId"])
-      .index("by_score", ["gameId", "score"]),
+      .index("by_score", ["gameId", "score"])
+      .index("by_score_global", ["score"]),
 
     // Game sessions for tracking active games
     gameSessions: defineTable({
