@@ -36,6 +36,35 @@ function pickThemeColor(theme: string): number {
   return 0x4a90e2;
 }
 
+function pickBackgroundColor(theme: string): number {
+  const t = theme.toLowerCase();
+  if (t.includes("space")) return 0xe6f0ff;     // pale sky blue
+  if (t.includes("fantasy")) return 0xf3e8ff;   // light lavender
+  if (t.includes("cyber")) return 0xeaffff;     // soft cyan
+  if (t.includes("nature") || t.includes("forest")) return 0xe8f5e9; // minty green
+  if (t.includes("retro")) return 0xfff1f2;     // soft pink
+  if (t.includes("ocean")) return 0xe0f7ff;     // sea foam
+  if (t.includes("neon")) return 0xf7ffe0;      // lime wash
+  if (t.includes("candy")) return 0xfff0f7;     // candy floss
+  if (t.includes("sunset")) return 0xfff4e0;    // warm peach
+  if (t.includes("pastel")) return 0xf7faff;    // pastel blue-white
+  return 0xf9fafb; // default: near-white
+}
+
+function isHumanCharacterRequested(prompt: string): boolean {
+  const p = prompt.toLowerCase();
+  return (
+    p.includes("human") ||
+    p.includes("boy") ||
+    p.includes("girl") ||
+    p.includes("man") ||
+    p.includes("woman") ||
+    p.includes("kid") ||
+    p.includes("runner human") ||
+    p.includes("person")
+  );
+}
+
 function difficultyScaleOf(diff: string): number {
   const d = diff.toLowerCase();
   if (d === "easy") return 0.75;
@@ -82,6 +111,7 @@ function analyzePrompt(prompt: string, parameters: any) {
     themeText;
 
   const mainColor = pickThemeColor(themeFromPrompt);
+  const bgColor = pickBackgroundColor(themeFromPrompt);
 
   // Duration can map to level length/density slightly
   const duration = clamp(parameters?.duration ?? 5, 1, 15);
@@ -93,6 +123,7 @@ function analyzePrompt(prompt: string, parameters: any) {
     densityFactor: clamp(densityFactor * durationFactor, 0.6, 1.8),
     mainColor,
     theme: themeFromPrompt || "default",
+    bgColor,
   };
 }
 
@@ -153,8 +184,8 @@ export const generateGame = action({
 });
 
 function generatePlatformerGame(prompt: string, parameters: any) {
-  // New: tune from prompt
   const tuning = analyzePrompt(prompt, parameters);
+  const human = isHumanCharacterRequested(prompt);
   const playerColor = tuning.mainColor;           // player color
   const platformColor = 0x8b4513;                 // keep wood-like
   const coinColor = 0xffd700;                     // gold
@@ -172,12 +203,23 @@ class PlatformerGame extends Phaser.Scene {
   }
 
   preload() {
-    // Create colored rectangles as sprites based on theme
-    this.add.graphics()
-      .fillStyle(${playerColor})
-      .fillRect(0, 0, 32, 32)
-      .generateTexture('player', 32, 32);
-    
+    // Light, theme-based background
+    this.cameras.main.setBackgroundColor('#${tuning.bgColor.toString(16)}');
+
+    // Player sprite (cartoon human if requested)
+    const g = this.add.graphics();
+    ${human ? `
+    // Cartoon kid: head + body with cheerful colors
+    g.fillStyle(0xffe0bd).fillCircle(16, 10, 10); // head (skin)
+    g.fillStyle(${playerColor}).fillRoundedRect(4, 18, 24, 22, 6); // body
+    g.fillStyle(0x000000).fillCircle(12, 8, 2).fillCircle(20, 8, 2); // eyes
+    g.lineStyle(2, 0x000000).strokeCircle(16, 12, 1); // nose hint
+    g.fillStyle(0xff6b6b).fillRoundedRect(10, 32, 12, 6, 3); // shoes
+    g.generateTexture('player', 32, 40);
+    ` : `
+    g.fillStyle(${playerColor}).fillRect(0, 0, 32, 32).generateTexture('player', 32, 32);
+    `}
+
     this.add.graphics()
       .fillStyle(${platformColor})
       .fillRect(0, 0, 64, 32)
@@ -203,6 +245,9 @@ class PlatformerGame extends Phaser.Scene {
     this.player.setCollideWorldBounds(true);
     this.physics.add.collider(this.player, this.platforms);
 
+    // Gentle idle bob to feel lively on ground
+    this.tweens.add({ targets: this.player, y: "-=2", duration: 600, yoyo: true, repeat: -1, ease: "sine.inOut" });
+
     // Create coins (density from prompt)
     this.coins = this.physics.add.group({
       key: 'coin',
@@ -217,20 +262,15 @@ class PlatformerGame extends Phaser.Scene {
     this.physics.add.collider(this.coins, this.platforms);
     this.physics.add.overlap(this.player, this.coins, this.collectCoin, null, this);
 
-    // Controls
     this.cursors = this.input.keyboard.createCursorKeys();
 
-    // Score text
-    this.scoreText = this.add.text(16, 16, 'Score: 0', {
-      fontSize: '32px',
-      color: '#fff'
-    });
+    this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '24px', color: '#111' });
 
-    // Game over text
-    this.gameOverText = this.add.text(400, 300, '', {
-      fontSize: '64px',
-      color: '#ff0000'
-    }).setOrigin(0.5);
+    this.gameOverText = this.add.text(400, 300, '', { fontSize: '48px', color: '#e53935' }).setOrigin(0.5);
+
+    // Restart key
+    this.input.keyboard.on('keydown-R', () => { if (this.scene && this.scene.restart) this.scene.restart(); });
+    this.add.text(400, 560, 'Press R to restart', { fontSize: '14px', color: '#333' }).setOrigin(0.5);
   }
 
   update() {
@@ -267,12 +307,7 @@ class PlatformerGame extends Phaser.Scene {
     this.gameOver = true;
     this.physics.pause();
     
-    if (won) {
-      this.gameOverText.setText('You Win!\\nScore: ' + this.score);
-    } else {
-      this.gameOverText.setText('Game Over!\\nScore: ' + this.score);
-    }
-
+    this.gameOverText.setText((won ? 'You Win!\\n' : 'Game Over!\\n') + 'Score: ' + this.score);
     this.game.events.emit('gameEnd', this.score);
   }
 }`,
@@ -290,8 +325,8 @@ class PlatformerGame extends Phaser.Scene {
 }
 
 function generateShooterGame(prompt: string, parameters: any) {
-  // New: tune from prompt
   const tuning = analyzePrompt(prompt, parameters);
+  const human = isHumanCharacterRequested(prompt);
   const playerColor = 0x00ff00;
   const enemyColor = tuning.mainColor;
   const bulletColor = 0xffff00;
@@ -309,11 +344,18 @@ class ShooterGame extends Phaser.Scene {
   }
 
   preload() {
-    this.add.graphics()
-      .fillStyle(${playerColor})
-      .fillRect(0, 0, 32, 32)
-      .generateTexture('player', 32, 32);
-    
+    this.cameras.main.setBackgroundColor('#${tuning.bgColor.toString(16)}');
+
+    const g = this.add.graphics();
+    ${human ? `
+    // Cartoon kid spaceship pilot (stylized)
+    g.fillStyle(0xffe0bd).fillCircle(16, 10, 10);
+    g.fillStyle(${playerColor}).fillRoundedRect(6, 18, 20, 20, 6);
+    g.fillStyle(0x000000).fillCircle(12, 8, 2).fillCircle(20, 8, 2);
+    g.generateTexture('player', 32, 38);
+    ` : `
+    g.fillStyle(${playerColor}).fillRect(0, 0, 32, 32).generateTexture('player', 32, 32);
+    `}
     this.add.graphics()
       .fillStyle(${enemyColor})
       .fillRect(0, 0, 24, 24)
@@ -345,15 +387,12 @@ class ShooterGame extends Phaser.Scene {
     this.physics.add.overlap(this.bullets, this.enemies, this.hitEnemy, null, this);
     this.physics.add.overlap(this.player, this.enemies, this.hitPlayer, null, this);
 
-    this.scoreText = this.add.text(16, 16, 'Score: 0', {
-      fontSize: '32px',
-      color: '#fff'
-    });
+    this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '24px', color: '#111' });
 
-    this.gameOverText = this.add.text(400, 300, '', {
-      fontSize: '64px',
-      color: '#ff0000'
-    }).setOrigin(0.5);
+    this.gameOverText = this.add.text(400, 300, '', { fontSize: '48px', color: '#e53935' }).setOrigin(0.5);
+
+    this.input.keyboard.on('keydown-R', () => { if (this.scene && this.scene.restart) this.scene.restart(); });
+    this.add.text(400, 560, 'Press R to restart', { fontSize: '14px', color: '#333' }).setOrigin(0.5);
   }
 
   update() {
@@ -433,6 +472,7 @@ function generatePuzzleGame(prompt: string, parameters: any) {
     return generateTicTacToeGame(prompt, parameters);
   }
 
+  const tuning = analyzePrompt(prompt, parameters);
   return {
     code: `
 class PuzzleGame extends Phaser.Scene {
@@ -446,6 +486,7 @@ class PuzzleGame extends Phaser.Scene {
   }
 
   preload() {
+    this.cameras.main.setBackgroundColor('#${tuning.bgColor.toString(16)}');
     // Create numbered tiles
     for (let i = 1; i <= 15; i++) {
       this.add.graphics()
@@ -596,7 +637,6 @@ class PuzzleGame extends Phaser.Scene {
 
 // Add: Dedicated Tic Tac Toe generator with better mechanics and instructions
 function generateTicTacToeGame(prompt: string, parameters: any) {
-  // Theme color from prompt analysis for accenting X/O and grid
   const tuning = analyzePrompt(prompt, parameters);
   const accent = tuning.mainColor;
 
@@ -615,14 +655,16 @@ class TicTacToeGame extends Phaser.Scene {
   }
 
   create() {
+    this.cameras.main.setBackgroundColor('#${tuning.bgColor.toString(16)}');
+
     this.add.text(400, 40, 'Tic Tac Toe', {
       fontSize: '36px',
-      color: '#ffffff'
+      color: '#111'
     }).setOrigin(0.5);
 
     this.instructions = this.add.text(400, 80, 'Click a cell to place X. First to 3 in a row wins!', {
       fontSize: '16px',
-      color: '#cccccc'
+      color: '#444'
     }).setOrigin(0.5);
 
     // Draw Grid
@@ -794,7 +836,6 @@ class TicTacToeGame extends Phaser.Scene {
 }
 
 function generateArcadeGame(prompt: string, parameters: any) {
-  // New: tune from prompt
   const tuning = analyzePrompt(prompt, parameters);
   const paddleColor = tuning.mainColor;
   const ballColor = 0xffffff;
@@ -814,6 +855,7 @@ class ArcadeGame extends Phaser.Scene {
   }
 
   preload() {
+    this.cameras.main.setBackgroundColor('#${tuning.bgColor.toString(16)}');
     this.add.graphics()
       .fillStyle(${paddleColor})
       .fillRect(0, 0, 100, 20)
@@ -854,22 +896,12 @@ class ArcadeGame extends Phaser.Scene {
 
     this.cursors = this.input.keyboard.createCursorKeys();
 
-    this.scoreText = this.add.text(16, 16, 'Score: 0', {
-      fontSize: '32px',
-      color: '#fff'
-    });
+    this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '24px', color: '#111' });
 
-    this.gameOverText = this.add.text(400, 300, '', {
-      fontSize: '64px',
-      color: '#ff0000'
-    }).setOrigin(0.5);
+    this.gameOverText = this.add.text(400, 300, '', { fontSize: '48px', color: '#e53935' }).setOrigin(0.5);
 
-    this.ball.body.onWorldBounds = true;
-    this.physics.world.on('worldbounds', (event, body) => {
-      if (body.gameObject === this.ball && event.down) {
-        this.endGame();
-      }
-    });
+    this.input.keyboard.on('keydown-R', () => { if (this.scene && this.scene.restart) this.scene.restart(); });
+    this.add.text(400, 560, 'Press R to restart', { fontSize: '14px', color: '#333' }).setOrigin(0.5);
   }
 
   update() {
@@ -934,10 +966,11 @@ class ArcadeGame extends Phaser.Scene {
 // Add a new Runner generator
 function generateRunnerGame(prompt: string, parameters: any) {
   const tuning = analyzePrompt(prompt, parameters);
+  const human = isHumanCharacterRequested(prompt) || true; // runner defaults to human kid unless specified otherwise
   const playerColor = tuning.mainColor;
   const groundColor = 0x8b5a2b;
   const obstacleColor = 0xff6b6b;
-  const bgColor = 0xc8e6c9; // light field-like background
+  const bgColor = tuning.bgColor;
   const baseSpeed = Math.round(220 * tuning.speedFactor * tuning.difficultyScale);
   const gravityY = 900;
   const spawnMs = clamp(Math.round(1200 / clamp(tuning.densityFactor, 0.8, 1.6)), 450, 1400);
@@ -953,39 +986,45 @@ class RunnerGame extends Phaser.Scene {
   }
 
   preload() {
-    // Background as a light field
     this.cameras.main.setBackgroundColor('#${bgColor.toString(16)}');
-    this.add.graphics().fillStyle(${playerColor}).fillRect(0,0,40,40).generateTexture('runner',40,40);
+    // Player (cartoon kid)
+    const g = this.add.graphics();
+    ${human ? `
+    g.fillStyle(0xffe0bd).fillCircle(20, 12, 12); // head
+    g.fillStyle(${playerColor}).fillRoundedRect(8, 24, 24, 26, 6); // body
+    g.fillStyle(0x000000).fillCircle(16, 10, 2).fillCircle(24, 10, 2); // eyes
+    g.fillStyle(0x333333).fillRoundedRect(10, 46, 8, 6, 2).fillRoundedRect(22, 46, 8, 6, 2); // shoes
+    g.generateTexture('runner', 40, 52);
+    ` : `
+    g.fillStyle(${playerColor}).fillRect(0,0,40,40).generateTexture('runner',40,40);
+    `}
     this.add.graphics().fillStyle(${groundColor}).fillRect(0,0,800,40).generateTexture('ground',800,40);
     this.add.graphics().fillStyle(${obstacleColor}).fillRect(0,0,30,50).generateTexture('obstacle',30,50);
   }
 
   create() {
-    // Physics
     this.physics.world.gravity.y = ${gravityY};
 
-    // Ground
     this.ground = this.physics.add.staticSprite(400, 560, 'ground');
     this.ground.setDepth(1);
 
-    // Player
     this.player = this.physics.add.sprite(120, 500, 'runner');
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(2);
-    this.player.body.setSize(30, 38).setOffset(5, 2);
+    this.player.body.setSize(30, 38).setOffset(5, 6);
 
     this.physics.add.collider(this.player, this.ground);
 
-    // Obstacles
+    // Subtle run bob animation
+    this.tweens.add({ targets: this.player, y: "-=2", duration: 180, yoyo: true, repeat: -1, ease: "sine.inOut" });
+
     this.obstacles = this.physics.add.group();
     this.physics.add.collider(this.obstacles, this.ground);
     this.physics.add.overlap(this.player, this.obstacles, this.hitObstacle, null, this);
 
-    // Controls
     this.cursors = this.input.keyboard.createCursorKeys();
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-    // Spawn timer
     this.spawnTimer = this.time.addEvent({
       delay: ${spawnMs},
       callback: this.spawnObstacle,
@@ -993,18 +1032,14 @@ class RunnerGame extends Phaser.Scene {
       loop: true
     });
 
-    // Score
-    this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '28px', color: '#000' });
+    this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '24px', color: '#111' });
 
-    // Instructions
-    this.add.text(400, 60, 'Press UP or SPACE to jump', { fontSize: '18px', color: '#333' }).setOrigin(0.5);
+    this.add.text(400, 60, 'Press UP or SPACE to jump', { fontSize: '16px', color: '#333' }).setOrigin(0.5);
 
-    // Game Over text
     this.gameOverText = this.add.text(400, 300, '', { fontSize: '56px', color: '#e53935' }).setOrigin(0.5).setDepth(3);
 
-    // Camera slight parallax to simulate run
-    this.bgGraphics = this.add.graphics();
-    this.bgTick = 0;
+    this.input.keyboard.on('keydown-R', () => { if (this.scene && this.scene.restart) this.scene.restart(); });
+    this.add.text(400, 560, 'Press R to restart', { fontSize: '14px', color: '#333' }).setOrigin(0.5);
   }
 
   update(time, delta) {
@@ -1052,8 +1087,7 @@ class RunnerGame extends Phaser.Scene {
     this.gameOverText.setText('Game Over!\\nScore: ' + this.score);
     this.game.events.emit('gameEnd', this.score);
   }
-}
-`,
+}`,
     assets: [
       { name: 'runner', type: 'sprite', url: 'data:runner' },
       { name: 'ground', type: 'sprite', url: 'data:ground' },

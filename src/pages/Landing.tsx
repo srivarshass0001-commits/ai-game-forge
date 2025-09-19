@@ -41,7 +41,7 @@ export default function Landing() {
   }
 
   return (
-    <div className="min-h-screen overflow-hidden">
+    <div className="min-h-screen overflow-hidden bg-gradient-to-b from-white to-sky-50 text-slate-900">
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center px-4">
         {/* Animated Background Elements */}
@@ -49,11 +49,11 @@ export default function Landing() {
           {[...Array(6)].map((_, i) => (
             <motion.div
               key={i}
-              className="absolute w-64 h-64 rounded-full opacity-10"
+              className="absolute w-64 h-64 rounded-full opacity-20"
               style={{
                 background: `linear-gradient(45deg, 
-                  oklch(0.7 0.3 ${280 + i * 40}) 0%, 
-                  oklch(0.6 0.25 ${320 + i * 30}) 100%)`,
+                  oklch(0.95 0.06 ${280 + i * 40}) 0%, 
+                  oklch(0.9 0.05 ${320 + i * 30}) 100%)`,
                 left: `${20 + i * 15}%`,
                 top: `${10 + i * 12}%`,
               }}
@@ -92,13 +92,13 @@ export default function Landing() {
 
             {/* Main Heading */}
             <div className="space-y-4">
-              <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white">
+              <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-slate-900">
                 Create Games with
-                <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent">
                   {" "}AI Magic
                 </span>
               </h1>
-              <p className="text-xl md:text-2xl text-white/80 max-w-3xl mx-auto leading-relaxed">
+              <p className="text-xl md:text-2xl text-slate-700 max-w-3xl mx-auto leading-relaxed">
                 Transform your ideas into playable 2D games instantly. 
                 No coding required – just describe your vision and watch AI bring it to life.
               </p>
