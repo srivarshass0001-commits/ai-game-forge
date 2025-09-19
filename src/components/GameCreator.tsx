@@ -89,6 +89,9 @@ export default function GameCreator({ onGameGenerated }: GameCreatorProps) {
               rows={4}
               className="glass border-white/20 text-white placeholder:text-white/50 focus:border-purple-400 focus:ring-purple-400/20 resize-none"
             />
+            <p className="text-xs text-white/60">
+              Examples: "Tic Tac Toe with clean UI and scoring", "A retro brick breaker with faster ball speed", "A tricky platformer with floating islands".
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
