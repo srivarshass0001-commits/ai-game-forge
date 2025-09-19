@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Play, Pause, RotateCcw, Trophy } from 'lucide-react';
+import { Play, Pause, RotateCcw, Trophy, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface GameCanvasProps {
@@ -19,7 +19,8 @@ interface GameCanvasProps {
       physics: boolean;
     };
   };
-  onScoreSubmit: (score: number) => void;
+  // Allow async or sync submission handlers
+  onScoreSubmit: (score: number) => Promise<void> | void;
   gameTitle: string;
 }
 
@@ -29,6 +30,8 @@ export default function GameCanvas({ gameData, onScoreSubmit, gameTitle }: GameC
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentScore, setCurrentScore] = useState(0);
   const [gameEnded, setGameEnded] = useState(false);
+  // Add submit loading state
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!canvasRef.current || !gameData) return;
@@ -110,9 +113,16 @@ export default function GameCanvas({ gameData, onScoreSubmit, gameTitle }: GameC
     }
   };
 
-  const handleSubmitScore = () => {
-    onScoreSubmit(currentScore);
-    toast.success('Score submitted to leaderboard!');
+  const handleSubmitScore = async () => {
+    try {
+      setIsSubmitting(true);
+      await Promise.resolve(onScoreSubmit(currentScore));
+      toast.success('Score submitted to leaderboard!');
+    } catch (e) {
+      toast.error('Failed to submit score');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -157,9 +167,19 @@ export default function GameCanvas({ gameData, onScoreSubmit, gameTitle }: GameC
                   onClick={handleSubmitScore}
                   size="sm"
                   className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 glow"
+                  disabled={isSubmitting}
                 >
-                  <Trophy className="h-4 w-4 mr-2" />
-                  Submit Score
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Trophy className="h-4 w-4 mr-2" />
+                      Submit Score
+                    </>
+                  )}
                 </Button>
               )}
             </div>

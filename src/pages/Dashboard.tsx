@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Navigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Plus, Library, Trophy, Sparkles, User } from 'lucide-react';
+import { LogOut, Plus, Library, Trophy, Sparkles, User, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -18,6 +18,7 @@ import Leaderboard from '@/components/Leaderboard';
 export default function Dashboard() {
   const { isLoading, isAuthenticated, user, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState('create');
+  const [signOutLoading, setSignOutLoading] = useState(false);
   const [currentGame, setCurrentGame] = useState<{
     data: any;
     title: string;
@@ -127,10 +128,13 @@ export default function Dashboard() {
 
   const handleSignOut = async () => {
     try {
+      setSignOutLoading(true);
       await signOut();
       toast.success('Signed out successfully');
     } catch (error) {
       toast.error('Failed to sign out');
+    } finally {
+      setSignOutLoading(false);
     }
   };
 
@@ -162,9 +166,19 @@ export default function Dashboard() {
               variant="outline"
               onClick={handleSignOut}
               className="glass border-white/20 text-white hover:bg-white/10"
+              disabled={signOutLoading}
             >
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
+              {signOutLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Signing Out...
+                </>
+              ) : (
+                <>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </>
+              )}
             </Button>
           </div>
         </div>

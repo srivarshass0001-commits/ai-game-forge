@@ -6,18 +6,22 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Play, Search, Filter, Globe, Lock, Calendar, User } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 
 interface GameLibraryProps {
-  onPlayGame: (gameId: Id<"games">) => void;
+  // Support async or sync handlers
+  onPlayGame: (gameId: Id<"games">) => Promise<void> | void;
 }
 
 export default function GameLibrary({ onPlayGame }: GameLibraryProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [genreFilter, setGenreFilter] = useState('all');
   const [showPublicOnly, setShowPublicOnly] = useState(true);
+  // Track per-card loading state by game id
+  const [loadingGameId, setLoadingGameId] = useState<Id<"games"> | null>(null);
 
   const publicGames = useQuery(api.games.getPublicGames, { limit: 20 });
   const userGames = useQuery(api.games.getUserGames);
@@ -168,11 +172,28 @@ export default function GameLibrary({ onPlayGame }: GameLibraryProps) {
                 </div>
                 
                 <Button
-                  onClick={() => onPlayGame(game._id)}
+                  onClick={async () => {
+                    setLoadingGameId(game._id);
+                    try {
+                      await Promise.resolve(onPlayGame(game._id));
+                    } finally {
+                      setLoadingGameId(null);
+                    }
+                  }}
                   className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 group-hover:glow transition-all duration-300"
+                  disabled={loadingGameId === game._id}
                 >
-                  <Play className="h-4 w-4 mr-2" />
-                  Play Game
+                  {loadingGameId === game._id ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 mr-2" />
+                      Play Game
+                    </>
+                  )}
                 </Button>
               </CardContent>
             </Card>
