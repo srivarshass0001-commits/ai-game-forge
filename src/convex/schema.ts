@@ -32,12 +32,62 @@ const schema = defineSchema(
       role: v.optional(roleValidator), // role of the user. do not remove
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
-    // add other tables here
+    // Games table for storing generated games
+    games: defineTable({
+      userId: v.id("users"),
+      title: v.string(),
+      prompt: v.string(),
+      parameters: v.object({
+        genre: v.string(),
+        difficulty: v.string(),
+        theme: v.string(),
+        duration: v.number(),
+      }),
+      gameData: v.object({
+        code: v.string(),
+        assets: v.array(v.object({
+          name: v.string(),
+          type: v.string(),
+          url: v.string(),
+        })),
+        config: v.object({
+          width: v.number(),
+          height: v.number(),
+          physics: v.boolean(),
+        }),
+      }),
+      isPublic: v.boolean(),
+    }).index("by_user", ["userId"])
+      .index("by_public", ["isPublic"]),
 
-    // tableName: defineTable({
-    //   ...
-    //   // table fields
-    // }).index("by_field", ["field"])
+    // Leaderboard entries
+    leaderboard: defineTable({
+      userId: v.id("users"),
+      gameId: v.id("games"),
+      playerName: v.string(),
+      score: v.number(),
+      level: v.optional(v.number()),
+      timeElapsed: v.optional(v.number()),
+      metadata: v.optional(v.object({
+        achievements: v.optional(v.array(v.string())),
+        stats: v.optional(v.record(v.string(), v.number())),
+      })),
+    }).index("by_game", ["gameId"])
+      .index("by_user", ["userId"])
+      .index("by_score", ["gameId", "score"]),
+
+    // Game sessions for tracking active games
+    gameSessions: defineTable({
+      userId: v.id("users"),
+      gameId: v.id("games"),
+      sessionId: v.string(),
+      startTime: v.number(),
+      endTime: v.optional(v.number()),
+      currentScore: v.number(),
+      isActive: v.boolean(),
+    }).index("by_user", ["userId"])
+      .index("by_session", ["sessionId"])
+      .index("by_game", ["gameId"]),
   },
   {
     schemaValidation: false,

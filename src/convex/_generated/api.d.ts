@@ -15,7 +15,11 @@ import type {
 } from "convex/server";
 import type * as auth_emailOtp from "../auth/emailOtp.js";
 import type * as auth from "../auth.js";
+import type * as gameGeneration from "../gameGeneration.js";
+import type * as gameSessions from "../gameSessions.js";
+import type * as games from "../games.js";
 import type * as http from "../http.js";
+import type * as leaderboard from "../leaderboard.js";
 import type * as users from "../users.js";
 
 /**
@@ -29,7 +33,11 @@ import type * as users from "../users.js";
 declare const fullApi: ApiFromModules<{
   "auth/emailOtp": typeof auth_emailOtp;
   auth: typeof auth;
+  gameGeneration: typeof gameGeneration;
+  gameSessions: typeof gameSessions;
+  games: typeof games;
   http: typeof http;
+  leaderboard: typeof leaderboard;
   users: typeof users;
 }>;
 export declare const api: FilterApi<
