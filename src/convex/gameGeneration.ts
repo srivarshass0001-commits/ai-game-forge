@@ -224,7 +224,8 @@ function generatePlatformerGame(prompt: string, parameters: any) {
   const coinColor = 0xffd700;                     // gold
   const coinRepeat = Math.max(6, Math.round(11 * tuning.densityFactor));
   const stepX = clamp(Math.round(70 / clamp(tuning.densityFactor, 0.7, 1.5)), 40, 100);
-  const jumpVelocity = Math.round(-260 * tuning.difficultyScale); // higher magnitude = higher jump
+  // increase jump power for better responsiveness under stronger gravity (see scene create below)
+  const jumpVelocity = Math.round(-360 * tuning.difficultyScale); // higher magnitude = higher jump
 
   return {
     code: `
@@ -265,6 +266,9 @@ class PlatformerGame extends Phaser.Scene {
   }
 
   create() {
+    // Explicit gravity for solid platformer feel
+    this.physics.world.gravity.y = 800;
+
     // Create platforms
     this.platforms = this.physics.add.staticGroup();
     this.platforms.create(400, 568, 'platform').setScale(12.5, 1).refreshBody();
@@ -296,6 +300,12 @@ class PlatformerGame extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.coins, this.collectCoin, null, this);
 
     this.cursors = this.input.keyboard.createCursorKeys();
+    // Capture arrow keys for reliable input
+    this.input.keyboard.addCapture([
+      Phaser.Input.Keyboard.KeyCodes.LEFT,
+      Phaser.Input.Keyboard.KeyCodes.RIGHT,
+      Phaser.Input.Keyboard.KeyCodes.UP,
+    ]);
 
     this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '24px', color: '#111' });
 
@@ -310,14 +320,16 @@ class PlatformerGame extends Phaser.Scene {
     if (this.gameOver) return;
 
     if (this.cursors.left.isDown) {
-      this.player.setVelocityX(-160);
+      this.player.setVelocityX(-200);
     } else if (this.cursors.right.isDown) {
-      this.player.setVelocityX(160);
+      this.player.setVelocityX(200);
     } else {
       this.player.setVelocityX(0);
     }
 
-    if (this.cursors.up.isDown && this.player.body.touching.down) {
+    // Grounded check + just-pressed jump for responsive control
+    const grounded = this.player.body.blocked.down || this.player.body.onFloor?.();
+    if (Phaser.Input.Keyboard.JustDown(this.cursors.up) && grounded) {
       this.player.setVelocityY(${jumpVelocity});
     }
 
@@ -883,9 +895,6 @@ function generateArcadeGame(prompt: string, parameters: any) {
 class ArcadeGame extends Phaser.Scene {
   constructor() {
     super({ key: 'ArcadeGame' });
-    this.score = 0;
-    this.gameOver = false;
-    this.ballSpeed = ${ballSpeed};
   }
 
   preload() {
@@ -907,14 +916,17 @@ class ArcadeGame extends Phaser.Scene {
   }
 
   create() {
+    // No gravity for brick breaker so the ball travels up to the bricks
+    this.physics.world.gravity.y = 0;
+
     this.paddle = this.physics.add.sprite(400, 550, 'paddle');
     this.paddle.setImmovable(true);
     this.paddle.setCollideWorldBounds(true);
 
     this.ball = this.physics.add.sprite(400, 300, 'ball');
-    this.ball.setVelocity(this.ballSpeed, -this.ballSpeed);
-    this.ball.setBounce(1);
-    this.ball.setCollideWorldBounds(true);
+    this.ball.setVelocity(${ballSpeed}, -${ballSpeed});
+    this.ball.setBounce(1, 1);
+    this.ball.setCollideWorldBounds(true, 1, 1);
 
     this.bricks = this.physics.add.staticGroup();
     for (let row = 0; row < ${rows}; row++) {
@@ -929,6 +941,14 @@ class ArcadeGame extends Phaser.Scene {
     this.physics.add.collider(this.ball, this.bricks, this.hitBrick, null, this);
 
     this.cursors = this.input.keyboard.createCursorKeys();
+    // Capture horizontal keys so paddle control is reliable
+    this.input.keyboard.addCapture([
+      Phaser.Input.Keyboard.KeyCodes.LEFT,
+      Phaser.Input.Keyboard.KeyCodes.RIGHT,
+    ]);
+
+    this.score = 0;
+    this.gameOver = false;
 
     this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '24px', color: '#111' });
 
@@ -948,10 +968,16 @@ class ArcadeGame extends Phaser.Scene {
     } else {
       this.paddle.setVelocityX(0);
     }
+
+    // End if ball falls below paddle
+    if (this.ball.y > 600) {
+      this.endGame(false);
+    }
   }
 
   hitPaddle(ball, paddle) {
     const diff = ball.x - paddle.x;
+    ball.setVelocityY(-Math.abs(ball.body.velocity.y)); // ensure it goes upward after paddle hit
     ball.setVelocityX(diff * 5);
   }
 
@@ -960,13 +986,13 @@ class ArcadeGame extends Phaser.Scene {
     this.score += 10;
     this.scoreText.setText('Score: ' + this.score);
 
-    this.ballSpeed += 5;
+    // Slight speed-up while keeping direction normalized
     const currentVel = ball.body.velocity;
-    const magnitude = Math.sqrt(currentVel.x * currentVel.x + currentVel.y * currentVel.y);
-    ball.setVelocity(
-      (currentVel.x / magnitude) * this.ballSpeed,
-      (currentVel.y / magnitude) * this.ballSpeed
-    );
+    let speed = Math.sqrt(currentVel.x * currentVel.x + currentVel.y * currentVel.y);
+    speed += 5;
+    const nx = currentVel.x / Math.max(speed - 5, 1);
+    const ny = currentVel.y / Math.max(speed - 5, 1);
+    ball.setVelocity(nx * speed, ny * speed);
 
     if (this.bricks.countActive() === 0) {
       this.endGame(true);
