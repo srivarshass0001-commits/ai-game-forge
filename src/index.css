@@ -118,7 +118,7 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    letter-spacing: 0.07em;
+    letter-spacing: -0.03em;
   }
   body {
     @apply bg-background text-foreground;
