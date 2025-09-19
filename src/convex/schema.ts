@@ -38,7 +38,6 @@ const schema = defineSchema(
       title: v.string(),
       prompt: v.string(),
       parameters: v.object({
-        genre: v.string(),
         difficulty: v.string(),
         theme: v.string(),
         duration: v.number(),

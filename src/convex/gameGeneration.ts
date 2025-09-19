@@ -107,10 +107,8 @@ export const generateGame = action({
     }),
   },
   handler: async (ctx, args) => {
-    // Simulate AI processing time
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // NEW: Always honor explicit prompt intents (e.g., Tic Tac Toe) regardless of selected genre
     const p = args.prompt.toLowerCase();
     const isTicTacToe =
       p.includes("tic tac toe") ||
@@ -124,7 +122,18 @@ export const generateGame = action({
       return generateTicTacToeGame(args.prompt, args.parameters);
     }
 
-    // Infer game type from prompt keywords, fallback to arcade
+    // Add runner detection
+    const isRunner =
+      p.includes("runner") ||
+      p.includes("endless runner") ||
+      p.includes("running") ||
+      p.includes("dash");
+
+    if (isRunner) {
+      return generateRunnerGame(args.prompt, args.parameters);
+    }
+
+    // Infer game type from keywords
     const keywords = {
       platformer: ["platform", "jump", "platformer"],
       shooter: ["shoot", "shooter", "laser", "bullet", "space invaders"],
@@ -919,5 +928,141 @@ class ArcadeGame extends Phaser.Scene {
       height: 600,
       physics: true
     }
+  };
+}
+
+// Add a new Runner generator
+function generateRunnerGame(prompt: string, parameters: any) {
+  const tuning = analyzePrompt(prompt, parameters);
+  const playerColor = tuning.mainColor;
+  const groundColor = 0x8b5a2b;
+  const obstacleColor = 0xff6b6b;
+  const bgColor = 0xc8e6c9; // light field-like background
+  const baseSpeed = Math.round(220 * tuning.speedFactor * tuning.difficultyScale);
+  const gravityY = 900;
+  const spawnMs = clamp(Math.round(1200 / clamp(tuning.densityFactor, 0.8, 1.6)), 450, 1400);
+
+  return {
+    code: `
+class RunnerGame extends Phaser.Scene {
+  constructor() {
+    super({ key: 'RunnerGame' });
+    this.score = 0;
+    this.gameOver = false;
+    this.speed = ${baseSpeed};
+  }
+
+  preload() {
+    // Background as a light field
+    this.cameras.main.setBackgroundColor('#${bgColor.toString(16)}');
+    this.add.graphics().fillStyle(${playerColor}).fillRect(0,0,40,40).generateTexture('runner',40,40);
+    this.add.graphics().fillStyle(${groundColor}).fillRect(0,0,800,40).generateTexture('ground',800,40);
+    this.add.graphics().fillStyle(${obstacleColor}).fillRect(0,0,30,50).generateTexture('obstacle',30,50);
+  }
+
+  create() {
+    // Physics
+    this.physics.world.gravity.y = ${gravityY};
+
+    // Ground
+    this.ground = this.physics.add.staticSprite(400, 560, 'ground');
+    this.ground.setDepth(1);
+
+    // Player
+    this.player = this.physics.add.sprite(120, 500, 'runner');
+    this.player.setCollideWorldBounds(true);
+    this.player.setDepth(2);
+    this.player.body.setSize(30, 38).setOffset(5, 2);
+
+    this.physics.add.collider(this.player, this.ground);
+
+    // Obstacles
+    this.obstacles = this.physics.add.group();
+    this.physics.add.collider(this.obstacles, this.ground);
+    this.physics.add.overlap(this.player, this.obstacles, this.hitObstacle, null, this);
+
+    // Controls
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+    // Spawn timer
+    this.spawnTimer = this.time.addEvent({
+      delay: ${spawnMs},
+      callback: this.spawnObstacle,
+      callbackScope: this,
+      loop: true
+    });
+
+    // Score
+    this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '28px', color: '#000' });
+
+    // Instructions
+    this.add.text(400, 60, 'Press UP or SPACE to jump', { fontSize: '18px', color: '#333' }).setOrigin(0.5);
+
+    // Game Over text
+    this.gameOverText = this.add.text(400, 300, '', { fontSize: '56px', color: '#e53935' }).setOrigin(0.5).setDepth(3);
+
+    // Camera slight parallax to simulate run
+    this.bgGraphics = this.add.graphics();
+    this.bgTick = 0;
+  }
+
+  update(time, delta) {
+    if (this.gameOver) return;
+
+    // Jump
+    if ((this.cursors.up.isDown || Phaser.Input.Keyboard.JustDown(this.spaceKey)) && this.player.body.touching.down) {
+      this.player.setVelocityY(-460);
+    }
+
+    // Move obstacles left
+    this.obstacles.children.iterate(ob => {
+      if (!ob) return;
+      ob.setVelocityX(-this.speed);
+      if (ob.x < -50) ob.destroy();
+    });
+
+    // Score increases over time
+    this.score += Math.floor(delta / 16);
+    this.scoreText.setText('Score: ' + this.score);
+
+    // Slightly ramp difficulty
+    if (time % 2000 < delta) this.speed += 4;
+
+    // Background motion hint
+    this.bgTick += delta * 0.1;
+  }
+
+  spawnObstacle() {
+    if (this.gameOver) return;
+    const obstacle = this.obstacles.create(820, 510, 'obstacle');
+    obstacle.body.setAllowGravity(true);
+    obstacle.setImmovable(true);
+    obstacle.setDepth(2);
+  }
+
+  hitObstacle() {
+    this.endGame();
+  }
+
+  endGame() {
+    this.gameOver = true;
+    this.physics.pause();
+    this.spawnTimer.destroy();
+    this.gameOverText.setText('Game Over!\\nScore: ' + this.score);
+    this.game.events.emit('gameEnd', this.score);
+  }
+}
+`,
+    assets: [
+      { name: 'runner', type: 'sprite', url: 'data:runner' },
+      { name: 'ground', type: 'sprite', url: 'data:ground' },
+      { name: 'obstacle', type: 'sprite', url: 'data:obstacle' },
+    ],
+    config: {
+      width: 800,
+      height: 600,
+      physics: true,
+    },
   };
 }
