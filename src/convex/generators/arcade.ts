@@ -42,7 +42,7 @@ class ArcadeGame extends Phaser.Scene {
     this.paddle.setCollideWorldBounds(true);
 
     this.ball = this.physics.add.sprite(400, 300, 'ball');
-    this.ball.setVelocity(${Math.round(180)} , -${Math.round(180)});
+    this.ball.setVelocity(${ballSpeed} , -${ballSpeed});
     this.ball.setBounce(1, 1);
     this.ball.setCollideWorldBounds(true, 1, 1);
 

@@ -2,7 +2,6 @@
 
 import { v } from "convex/values";
 import { action } from "./_generated/server";
-import { internal } from "./_generated/api";
 import { generatePlatformerGame } from "./generators/platformer";
 import { generateShooterGame } from "./generators/shooter";
 import { generatePuzzleGame } from "./generators/puzzle";
@@ -10,6 +9,7 @@ import { generateTicTacToeGame } from "./generators/tictactoe";
 import { generateArcadeGame } from "./generators/arcade";
 import { generateRunnerGame } from "./generators/runner";
 
+/*
 // Add: prompt analysis utilities for deterministic, prompt-driven tuning
 function hashPrompt(str: string): number {
   let hash = 0;
@@ -148,6 +148,7 @@ function isHumanCharacterRequested(prompt: string, overrides?: { humanCharacter?
   );
 }
 
+*/
 /**
  * Temporarily disable external LLM parsing to ensure build stability.
  * Deterministic analyzer will be used instead. We can re-enable a robust parser later.
@@ -163,7 +164,76 @@ async function llmAnalyzePrompt(
   densityFactor?: number;
   difficultyScale?: number;
 } | null> {
-  return null;
+  // Only run if OpenRouter is configured
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const reqBody = {
+      model: "anthropic/claude-3-haiku",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You classify a game idea prompt into a JSON object with fields: gameType, humanCharacter, theme, speedFactor, densityFactor, difficultyScale. Respond with ONLY JSON. Valid gameType values: runner, platformer, shooter, puzzle, arcade, tictactoe.",
+        },
+        {
+          role: "user",
+          content: `Prompt: ${prompt}
+Parameters: ${JSON.stringify({
+            difficulty: parameters?.difficulty,
+            theme: parameters?.theme,
+            duration: parameters?.duration,
+          })}
+Return ONLY JSON like:
+{"gameType":"runner","humanCharacter":true,"theme":"neon","speedFactor":1.1,"densityFactor":0.9,"difficultyScale":1.0}`,
+        },
+      ],
+      max_tokens: 200,
+      temperature: 0,
+    };
+
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "X-Title": "AI Game Forge",
+      },
+      body: JSON.stringify(reqBody),
+    });
+
+    if (!res.ok) {
+      // Soft fail
+      return null;
+    }
+    const data = await res.json();
+    const content: string | undefined =
+      data?.choices?.[0]?.message?.content ?? data?.choices?.[0]?.message;
+
+    if (!content || typeof content !== "string") return null;
+
+    // Attempt to extract JSON from the content (strip any extra text)
+    const firstBrace = content.indexOf("{");
+    const lastBrace = content.lastIndexOf("}");
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) return null;
+
+    const jsonText = content.slice(firstBrace, lastBrace + 1);
+    const parsed = JSON.parse(jsonText);
+
+    // Basic validation
+    const out: any = {};
+    if (typeof parsed.gameType === "string") out.gameType = parsed.gameType;
+    if (typeof parsed.humanCharacter === "boolean") out.humanCharacter = parsed.humanCharacter;
+    if (typeof parsed.theme === "string") out.theme = parsed.theme;
+    if (typeof parsed.speedFactor === "number") out.speedFactor = parsed.speedFactor;
+    if (typeof parsed.densityFactor === "number") out.densityFactor = parsed.densityFactor;
+    if (typeof parsed.difficultyScale === "number") out.difficultyScale = parsed.difficultyScale;
+
+    return Object.keys(out).length ? out : null;
+  } catch {
+    return null;
+  }
 }
 
 // Mock AI game generation - in a real app, this would call OpenAI/Claude
@@ -179,6 +249,25 @@ export const generateGame = action({
   handler: async (ctx, args) => {
     await new Promise(resolve => setTimeout(resolve, 2000));
 
+    // Try LLM-assisted analysis (if OpenRouter configured)
+    let llm = await llmAnalyzePrompt(args.prompt, args.parameters).catch(() => null);
+    // Merge overrides for deterministic analyzer downstream
+    if (llm) {
+      args = {
+        ...args,
+        parameters: {
+          ...args.parameters,
+          __overrides: {
+            ...(args.parameters as any).__overrides,
+            theme: llm.theme,
+            speedFactor: typeof llm.speedFactor === "number" ? llm.speedFactor : undefined,
+            densityFactor: typeof llm.densityFactor === "number" ? llm.densityFactor : undefined,
+            difficultyScale: typeof llm.difficultyScale === "number" ? llm.difficultyScale : undefined,
+          },
+        },
+      };
+    }
+
     const p = args.prompt.toLowerCase();
     const isTicTacToe =
       p.includes("tic tac toe") ||
@@ -188,12 +277,14 @@ export const generateGame = action({
       p.includes("x and o") ||
       p.includes("x&o");
 
-    if (isTicTacToe) {
+    // If LLM explicitly requests TicTacToe, take precedence
+    if (llm?.gameType === "tictactoe" || isTicTacToe) {
       return generateTicTacToeGame(args.prompt, args.parameters);
     }
 
-    // Add runner detection
+    // Runner detection (LLM-first)
     const isRunner =
+      llm?.gameType === "runner" ||
       p.includes("runner") ||
       p.includes("endless runner") ||
       p.includes("running") ||
@@ -203,7 +294,22 @@ export const generateGame = action({
       return generateRunnerGame(args.prompt, args.parameters);
     }
 
-    // Infer game type from keywords
+    // If LLM returned a gameType, use it directly
+    if (llm?.gameType) {
+      switch (llm.gameType) {
+        case "platformer":
+          return generatePlatformerGame(args.prompt, args.parameters);
+        case "shooter":
+          return generateShooterGame(args.prompt, args.parameters);
+        case "puzzle":
+          return generatePuzzleGame(args.prompt, args.parameters);
+        case "arcade":
+          return generateArcadeGame(args.prompt, args.parameters);
+        // tictactoe handled above
+      }
+    }
+
+    // Fallback to keyword inference
     const keywords = {
       platformer: ["platform", "jump", "platformer"],
       shooter: ["shoot", "shooter", "laser", "bullet", "space invaders"],

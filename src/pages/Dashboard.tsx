@@ -4,12 +4,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { Navigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Plus, Library, Trophy, Sparkles, User, Loader2 } from 'lucide-react';
+import { LogOut, Plus, Library, Trophy, Sparkles, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
-import { useMemo } from 'react';
+/* Removed unused useMemo import */
 
 import GameCreator from '@/components/GameCreator';
 import GameCanvas from '@/components/GameCanvas';

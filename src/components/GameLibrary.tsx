@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+/* Removed unused Select imports */
 import { Play, Search, Globe, Lock, Calendar, User } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { useQuery } from 'convex/react';
