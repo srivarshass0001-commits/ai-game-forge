@@ -1,2 +1,0 @@
-    let text = typeof raw === "string" ? raw.trim() : "";
-    const match = text.match(/

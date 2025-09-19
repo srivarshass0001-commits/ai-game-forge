@@ -1,0 +1,27 @@
+[build]
+  command = "CI=false npm run build || true"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "18"
+  NPM_FLAGS = "--prefix=/dev/null"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.processing]
+  skip_processing = true
+
+[build.processing.css]
+  bundle = false
+  minify = false
+
+[build.processing.js]
+  bundle = false
+  minify = false
+
+[build.processing.html]
+  pretty_urls = true
+
+[build.processing.images]
+  compress = false
