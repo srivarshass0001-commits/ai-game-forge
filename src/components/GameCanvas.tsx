@@ -93,8 +93,9 @@ export default function GameCanvas({ gameData, onScoreSubmit, gameTitle }: GameC
   }, [gameData]);
 
   const handleRestart = () => {
-    if (gameRef.current) {
-      gameRef.current.scene.restart();
+    if (gameRef.current && gameRef.current.scene.scenes[0]) {
+      // Restart the active scene correctly
+      gameRef.current.scene.scenes[0].scene.restart();
       setIsPlaying(true);
       setGameEnded(false);
       setCurrentScore(0);
