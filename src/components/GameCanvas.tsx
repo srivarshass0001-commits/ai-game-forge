@@ -37,7 +37,8 @@ export default function GameCanvas({ gameData, onScoreSubmit, gameTitle }: GameC
     if (!canvasRef.current || !gameData) return;
 
     // Dynamically import Phaser
-    import('phaser').then((Phaser) => {
+    import('phaser').then((m) => {
+      const Phaser = (m as any).default ?? (m as any);
       // Clean up existing game
       if (gameRef.current) {
         gameRef.current.destroy(true);

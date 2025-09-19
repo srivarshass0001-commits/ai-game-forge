@@ -87,7 +87,8 @@ const schema = defineSchema(
       isActive: v.boolean(),
     }).index("by_user", ["userId"])
       .index("by_session", ["sessionId"])
-      .index("by_game", ["gameId"]),
+      .index("by_game", ["gameId"])
+      .index("by_user_and_game_and_isActive", ["userId", "gameId", "isActive"]),
   },
   {
     schemaValidation: false,

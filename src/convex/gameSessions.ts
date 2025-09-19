@@ -14,14 +14,12 @@ export const startGameSession = mutation({
       throw new Error("User must be authenticated");
     }
 
-    // End any existing active sessions for this user and game
+    // End any existing active sessions for this user and game (use composite index, avoid filter)
     const existingSessions = await ctx.db
       .query("gameSessions")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .filter((q) => q.and(
-        q.eq(q.field("gameId"), args.gameId),
-        q.eq(q.field("isActive"), true)
-      ))
+      .withIndex("by_user_and_game_and_isActive", (q) =>
+        q.eq("userId", user._id).eq("gameId", args.gameId).eq("isActive", true)
+      )
       .collect();
 
     for (const session of existingSessions) {
