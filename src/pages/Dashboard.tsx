@@ -101,10 +101,21 @@ export default function Dashboard() {
     }
   };
 
-  const handlePlayGame = async (gameId: Id<"games">) => {
-    // In a real app, you'd fetch the game data here
-    toast.info('Loading game...');
-    setActiveTab('play');
+  const handlePlayGame = async (game: any) => {
+    try {
+      toast.info('Loading game...');
+      setCurrentGame({
+        data: game.gameData,
+        title: game.title,
+        prompt: game.prompt,
+        parameters: game.parameters,
+        id: game._id,
+      });
+      setActiveTab('play');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to load the selected game');
+    }
   };
 
   const handleScoreSubmit = async (score: number) => {
@@ -144,7 +155,7 @@ export default function Dashboard() {
       <motion.header
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass border-b border-white/20 sticky top-0 z-50 backdrop-blur-xl"
+        className="border-b border-white/20 sticky top-0 z-50 backdrop-blur-xl bg-gradient-to-r from-purple-400/40 via-pink-400/40 to-orange-300/40"
       >
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -154,7 +165,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-white tracking-tight">
-                  AI Game Creator
+                  PromptPlay
                 </h1>
                 <p className="text-white/60 text-sm">
                   Welcome back, {user?.name || 'Creator'}!

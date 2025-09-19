@@ -12,8 +12,8 @@ import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 
 interface GameLibraryProps {
-  // Support async or sync handlers
-  onPlayGame: (gameId: Id<"games">) => Promise<void> | void;
+  // Update: pass the full game doc so we can immediately play saved games
+  onPlayGame: (game: any) => Promise<void> | void;
 }
 
 export default function GameLibrary({ onPlayGame }: GameLibraryProps) {
@@ -150,7 +150,8 @@ export default function GameLibrary({ onPlayGame }: GameLibraryProps) {
                   onClick={async () => {
                     setLoadingGameId(game._id);
                     try {
-                      await Promise.resolve(onPlayGame(game._id));
+                      // Pass full game to allow immediate play without fetching again
+                      await Promise.resolve(onPlayGame(game));
                     } finally {
                       setLoadingGameId(null);
                     }

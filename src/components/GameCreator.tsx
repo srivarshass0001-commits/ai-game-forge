@@ -123,6 +123,11 @@ export default function GameCreator({ onGameGenerated }: GameCreatorProps) {
                   <SelectItem value="cyberpunk">🤖 Cyberpunk</SelectItem>
                   <SelectItem value="nature">🌲 Nature</SelectItem>
                   <SelectItem value="retro">📼 Retro</SelectItem>
+                  <SelectItem value="ocean">🌊 Ocean</SelectItem>
+                  <SelectItem value="neon">🌈 Neon</SelectItem>
+                  <SelectItem value="candy">🍭 Candy</SelectItem>
+                  <SelectItem value="sunset">🌅 Sunset</SelectItem>
+                  <SelectItem value="pastel">🎨 Pastel</SelectItem>
                 </SelectContent>
               </Select>
             </div>

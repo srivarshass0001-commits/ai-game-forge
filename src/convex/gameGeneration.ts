@@ -25,8 +25,14 @@ function pickThemeColor(theme: string): number {
   if (t.includes("space")) return 0x4a90e2;      // blue
   if (t.includes("fantasy")) return 0x8e44ad;    // purple
   if (t.includes("cyber")) return 0x00ffff;      // cyan
-  if (t.includes("nature")) return 0x2ecc71;     // green
+  if (t.includes("nature") || t.includes("forest")) return 0x2ecc71;     // green
   if (t.includes("retro")) return 0xff6b6b;      // red
+  // New creative themes
+  if (t.includes("ocean")) return 0x1ca3ec;      // ocean blue
+  if (t.includes("neon")) return 0x39ff14;       // bright neon green
+  if (t.includes("candy")) return 0xff69b4;      // hot pink
+  if (t.includes("sunset")) return 0xff8c00;     // deep orange
+  if (t.includes("pastel")) return 0xa3c4f3;     // soft pastel blue
   return 0x4a90e2;
 }
 

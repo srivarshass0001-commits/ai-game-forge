@@ -343,7 +343,7 @@ export default function Landing() {
             <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
               <Sparkles className="h-4 w-4 text-white" />
             </div>
-            <span className="text-white font-semibold">AI Game Creator</span>
+            <span className="text-white font-semibold">PromptPlay</span>
           </div>
           <p className="text-white/60">
             Powered by{" "}
