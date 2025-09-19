@@ -13,7 +13,8 @@ import Landing from "./pages/Landing.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import "./types/global.d.ts";
 
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
+const convex = convexUrl ? new ConvexReactClient(convexUrl) : null;
 
 function RouteSyncer() {
   const location = useLocation();
@@ -42,18 +43,41 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <VlyToolbar />
     <InstrumentationProvider>
-      <ConvexAuthProvider client={convex}>
-        <BrowserRouter>
-          <RouteSyncer />
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/auth" element={<AuthPage redirectAfterAuth="/dashboard" />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-        <Toaster />
-      </ConvexAuthProvider>
+      {convex ? (
+        <ConvexAuthProvider client={convex}>
+          <BrowserRouter>
+            <RouteSyncer />
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/auth" element={<AuthPage redirectAfterAuth="/dashboard" />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+          <Toaster />
+        </ConvexAuthProvider>
+      ) : (
+        <>
+          <div className="min-h-screen flex items-center justify-center p-6">
+            <div className="glass border-white/20 max-w-xl w-full p-6 rounded-xl text-center space-y-4">
+              <h1 className="text-2xl font-bold text-white">Convex URL not configured</h1>
+              <p className="text-white/80">
+                The app can't connect to the backend because VITE_CONVEX_URL is not set.
+              </p>
+              <ol className="text-left text-white/70 list-decimal list-inside space-y-1">
+                <li>Open the Integrations tab.</li>
+                <li>Add/configure Convex and copy your Convex deployment URL.</li>
+                <li>Set VITE_CONVEX_URL in the API Keys tab.</li>
+                <li>Reload the page.</li>
+              </ol>
+              <p className="text-white/60 text-sm">
+                If you still see this screen, please contact support on Discord.
+              </p>
+            </div>
+          </div>
+          <Toaster />
+        </>
+      )}
     </InstrumentationProvider>
   </StrictMode>,
 );
