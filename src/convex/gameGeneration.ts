@@ -378,7 +378,8 @@ function generateShooterGame(prompt: string, parameters: any) {
   const playerColor = 0x00ff00;
   const enemyColor = tuning.mainColor;
   const bulletColor = 0xffff00;
-  const baseEnemySpeed = Math.round(40 * tuning.speedFactor * tuning.difficultyScale + 30);
+  // LOWERED: enemy base speed
+  const baseEnemySpeed = Math.round(24 * tuning.speedFactor * tuning.difficultyScale + 20);
   const spawnDelayMs = clamp(Math.round(1100 / clamp(tuning.densityFactor, 0.7, 1.5)), 450, 1400);
 
   return {
@@ -477,8 +478,10 @@ class ShooterGame extends Phaser.Scene {
     if (this.gameOver) return;
     const x = Phaser.Math.Between(50, 750);
     const enemy = this.enemies.create(x, 0, 'enemy');
-    enemy.setVelocityY(this.enemySpeed);
-    this.enemySpeed += 2; // small ramp-up over time
+    // CLAMP: prevent enemies from becoming too fast
+    enemy.setVelocityY(Math.min(this.enemySpeed, 160));
+    // GENTLER RAMP: slower increase over time
+    this.enemySpeed += 1;
   }
 
   hitEnemy(bullet, enemy) {
