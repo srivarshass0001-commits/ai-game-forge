@@ -20,7 +20,6 @@ export default function GameCreator({ onGameGenerated }: GameCreatorProps) {
   const [prompt, setPrompt] = useState('');
   const [title, setTitle] = useState('');
   const [parameters, setParameters] = useState({
-    genre: 'arcade',
     difficulty: 'medium',
     theme: 'space',
     duration: 5,
@@ -95,21 +94,6 @@ export default function GameCreator({ onGameGenerated }: GameCreatorProps) {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-white/90 font-medium">Genre</Label>
-              <Select value={parameters.genre} onValueChange={(value) => setParameters(prev => ({ ...prev, genre: value }))}>
-                <SelectTrigger className="glass border-white/20 text-white focus:border-purple-400 focus:ring-purple-400/20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="glass border-white/20 bg-slate-900/90 backdrop-blur-xl">
-                  <SelectItem value="arcade">🕹️ Arcade</SelectItem>
-                  <SelectItem value="platformer">🏃 Platformer</SelectItem>
-                  <SelectItem value="shooter">🚀 Shooter</SelectItem>
-                  <SelectItem value="puzzle">🧩 Puzzle</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             <div className="space-y-2">
               <Label className="text-white/90 font-medium">Difficulty</Label>
               <Select value={parameters.difficulty} onValueChange={(value) => setParameters(prev => ({ ...prev, difficulty: value }))}>

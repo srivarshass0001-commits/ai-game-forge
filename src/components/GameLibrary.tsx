@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Play, Search, Filter, Globe, Lock, Calendar, User } from 'lucide-react';
+import { Play, Search, Globe, Lock, Calendar, User } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -18,7 +18,6 @@ interface GameLibraryProps {
 
 export default function GameLibrary({ onPlayGame }: GameLibraryProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [genreFilter, setGenreFilter] = useState('all');
   const [showPublicOnly, setShowPublicOnly] = useState(true);
   // Track per-card loading state by game id
   const [loadingGameId, setLoadingGameId] = useState<Id<"games"> | null>(null);
@@ -31,19 +30,8 @@ export default function GameLibrary({ onPlayGame }: GameLibraryProps) {
   const filteredGames = allGames.filter(game => {
     const matchesSearch = game.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          game.prompt.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesGenre = genreFilter === 'all' || game.parameters.genre === genreFilter;
-    return matchesSearch && matchesGenre;
+    return matchesSearch;
   });
-
-  const getGenreIcon = (genre: string) => {
-    const icons = {
-      arcade: '🕹️',
-      platformer: '🏃',
-      shooter: '🚀',
-      puzzle: '🧩'
-    };
-    return icons[genre as keyof typeof icons] || '🎮';
-  };
 
   const getDifficultyColor = (difficulty: string) => {
     const colors = {
@@ -80,19 +68,6 @@ export default function GameLibrary({ onPlayGame }: GameLibraryProps) {
                 className="glass border-white/20 text-white placeholder:text-white/50 focus:border-purple-400 focus:ring-purple-400/20"
               />
             </div>
-            <Select value={genreFilter} onValueChange={setGenreFilter}>
-              <SelectTrigger className="glass border-white/20 text-white focus:border-purple-400 focus:ring-purple-400/20 w-full sm:w-48">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="glass border-white/20 bg-slate-900/90 backdrop-blur-xl">
-                <SelectItem value="all">All Genres</SelectItem>
-                <SelectItem value="arcade">🕹️ Arcade</SelectItem>
-                <SelectItem value="platformer">🏃 Platformer</SelectItem>
-                <SelectItem value="shooter">🚀 Shooter</SelectItem>
-                <SelectItem value="puzzle">🧩 Puzzle</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
           
           <div className="flex gap-2">
@@ -138,7 +113,7 @@ export default function GameLibrary({ onPlayGame }: GameLibraryProps) {
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
                     <CardTitle className="text-lg font-bold tracking-tight text-white truncate">
-                      {getGenreIcon(game.parameters.genre)} {game.title}
+                      {game.title}
                     </CardTitle>
                     <div className="flex items-center gap-2 mt-2">
                       <Badge className={getDifficultyColor(game.parameters.difficulty)}>

@@ -95,7 +95,6 @@ export const generateGame = action({
   args: {
     prompt: v.string(),
     parameters: v.object({
-      genre: v.string(),
       difficulty: v.string(),
       theme: v.string(),
       duration: v.number(),
@@ -119,17 +118,21 @@ export const generateGame = action({
       return generateTicTacToeGame(args.prompt, args.parameters);
     }
 
-    // Generate game based on parameters (fallback to genre)
-    const gameTemplates = {
-      platformer: generatePlatformerGame,
-      shooter: generateShooterGame,
-      puzzle: generatePuzzleGame,
-      arcade: generateArcadeGame,
+    // Infer game type from prompt keywords, fallback to arcade
+    const keywords = {
+      platformer: ["platform", "jump", "platformer"],
+      shooter: ["shoot", "shooter", "laser", "bullet", "space invaders"],
+      puzzle: ["puzzle", "slide", "logic", "match"],
+      arcade: ["arcade", "brick", "breakout", "pong", "ball"],
     };
 
-    const generator = gameTemplates[args.parameters.genre as keyof typeof gameTemplates] || generateArcadeGame;
-    const gameData = generator(args.prompt, args.parameters);
+    const matches = (list: string[]) => list.some(k => p.includes(k));
+    let generator = generateArcadeGame;
+    if (matches(keywords.platformer)) generator = generatePlatformerGame;
+    else if (matches(keywords.shooter)) generator = generateShooterGame;
+    else if (matches(keywords.puzzle)) generator = generatePuzzleGame;
 
+    const gameData = generator(args.prompt, args.parameters);
     return gameData;
   },
 });
