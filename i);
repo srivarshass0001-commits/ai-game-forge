@@ -1,0 +1,18 @@
+    if (fenceMatch && fenceMatch[1]) {
+      jsonStr = fenceMatch[1].trim();
+    }
+
+    // As a fallback, try to extract the first JSON object in the text
+    if (!jsonStr.trim().startsWith("{")) {
+      const braceMatch = text.match(/\{[\s\S]*\}/);
+      if (braceMatch) {
+        jsonStr = braceMatch[0];
+      }
+    }
+
+    try {
+      return JSON.parse(jsonStr);
+    } catch {
+      return null;
+    }
+// ... keep existing code (rest of llmAnalyzePrompt and the file)

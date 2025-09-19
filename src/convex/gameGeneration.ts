@@ -155,7 +155,6 @@ async function llmAnalyzePrompt(prompt: string, parameters: any): Promise<{
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) return null;
 
-    // Dynamically import to avoid requiring the dependency if unused
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI({
       apiKey,
@@ -181,10 +180,7 @@ async function llmAnalyzePrompt(prompt: string, parameters: any): Promise<{
       "- Only return raw JSON. No markdown, no commentary.",
     ].join("\n");
 
-    const userContent = JSON.stringify({
-      prompt,
-      parameters,
-    });
+    const userContent = JSON.stringify({ prompt, parameters });
 
     const completion = await openai.chat.completions.create({
       model: "anthropic/claude-3-haiku",
@@ -196,9 +192,13 @@ async function llmAnalyzePrompt(prompt: string, parameters: any): Promise<{
       max_tokens: 300,
     });
 
+    // Fix: robustly parse JSON from raw text or fenced code block
     const raw = completion.choices?.[0]?.message?.content ?? "";
-    // Strip optional markdown code fences (
-    const jsonStr = raw.trim().replace(/^
+    const text = typeof raw === "string" ? raw.trim() : "";
+    let jsonStr = text;
+
+    // Prefer fenced code block content if present
+    const fenceMatch = text.match(/
     \s*`.*\s*`/gm, "").trim();
     
     try {
@@ -461,6 +461,7 @@ class ShooterGame extends Phaser.Scene {
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.input.keyboard.addCapture([Phaser.Input.Keyboard.KeyCodes.UP, Phaser.Input.Keyboard.KeyCodes.SPACE]);
 
     this.enemyTimer = this.time.addEvent({
       delay: ${spawnDelayMs},
@@ -1054,11 +1055,10 @@ function generateRunnerGame(prompt: string, parameters: any) {
   const human = isHumanCharacterRequested(prompt) || true; // runner defaults to human kid unless specified otherwise
   const playerColor = tuning.mainColor;
   const groundColor = 0x8b5a2b;
-  const obstacleColor = 0xff6b6b;
   const bgColor = tuning.bgColor;
-  const baseSpeed = Math.round(220 * tuning.speedFactor * tuning.difficultyScale);
-  const gravityY = 900;
-  const spawnMs = clamp(Math.round(1200 / clamp(tuning.densityFactor, 0.8, 1.6)), 450, 1400);
+  const baseSpeed = Math.round(260 * tuning.speedFactor * tuning.difficultyScale);
+  const gravityY = 1000;
+  const spawnMs = clamp(Math.round(1100 / clamp(tuning.densityFactor, 0.8, 1.6)), 450, 1400);
 
   return {
     code: `
@@ -1068,48 +1068,95 @@ class RunnerGame extends Phaser.Scene {
     this.score = 0;
     this.gameOver = false;
     this.speed = ${baseSpeed};
+    this.runFrame = 0;
+    this.runElapsed = 0;
   }
 
   preload() {
     this.cameras.main.setBackgroundColor('#${bgColor.toString(16)}');
-    // Player (cartoon kid)
-    const g = this.add.graphics();
-    ${human ? `
-    g.fillStyle(0xffe0bd).fillCircle(20, 12, 12); // head
-    g.fillStyle(${playerColor}).fillRoundedRect(8, 24, 24, 26, 6); // body
-    g.fillStyle(0x000000).fillCircle(16, 10, 2).fillCircle(24, 10, 2); // eyes
-    g.fillStyle(0x333333).fillRoundedRect(10, 46, 8, 6, 2).fillRoundedRect(22, 46, 8, 6, 2); // shoes
-    g.generateTexture('runner', 40, 52);
-    ` : `
-    g.fillStyle(${playerColor}).fillRect(0,0,40,40).generateTexture('runner',40,40);
-    `}
+
+    // Ground
     this.add.graphics().fillStyle(${groundColor}).fillRect(0,0,800,40).generateTexture('ground',800,40);
-    this.add.graphics().fillStyle(${obstacleColor}).fillRect(0,0,30,50).generateTexture('obstacle',30,50);
+
+    // Player (cartoon kid) with two running frames
+    const g1 = this.add.graphics();
+    ${human ? `
+    // Frame 1
+    g1.clear();
+    g1.fillStyle(0xffe0bd).fillCircle(20, 12, 12); // head
+    g1.fillStyle(${playerColor}).fillRoundedRect(8, 24, 24, 26, 6); // body
+    g1.fillStyle(0x000000).fillCircle(16, 10, 2).fillCircle(24, 10, 2); // eyes
+    // legs (pose A)
+    g1.fillStyle(0x333333).fillRoundedRect(10, 48, 7, 8, 2); // left foot
+    g1.fillStyle(0x333333).fillRoundedRect(23, 44, 7, 8, 2); // right foot up
+    g1.generateTexture('runner1', 40, 56);
+
+    // Frame 2
+    const g2 = this.add.graphics();
+    g2.clear();
+    g2.fillStyle(0xffe0bd).fillCircle(20, 12, 12); // head
+    g2.fillStyle(${playerColor}).fillRoundedRect(8, 24, 24, 26, 6); // body
+    g2.fillStyle(0x000000).fillCircle(16, 10, 2).fillCircle(24, 10, 2); // eyes
+    // legs (pose B)
+    g2.fillStyle(0x333333).fillRoundedRect(10, 44, 7, 8, 2); // left foot up
+    g2.fillStyle(0x333333).fillRoundedRect(23, 48, 7, 8, 2); // right foot
+    g2.generateTexture('runner2', 40, 56);
+    ` : `
+    g1.fillStyle(${playerColor}).fillRect(0,0,40,40).generateTexture('runner1',40,40);
+    const g2 = this.add.graphics();
+    g2.fillStyle(${playerColor}).fillRect(0,0,40,40).generateTexture('runner2',40,40);
+    `}
+
+    // Obstacles: stick, cone, crate, barrel
+    // Stick
+    const s = this.add.graphics();
+    s.fillStyle(0x5a3e2b).fillRect(0,0,12,48);
+    s.generateTexture('ob_stick',12,48);
+
+    // Traffic cone (triangle)
+    const c = this.add.graphics();
+    c.fillStyle(0xff7f11);
+    c.beginPath();
+    c.moveTo(18,0); c.lineTo(36,50); c.lineTo(0,50); c.closePath(); c.fillPath();
+    c.generateTexture('ob_cone',36,50);
+
+    // Crate
+    const cr = this.add.graphics();
+    cr.fillStyle(0x8b4513).fillRoundedRect(0,0,42,42,6).lineStyle(2,0x5e3210).strokeRoundedRect(0,0,42,42,6);
+    cr.generateTexture('ob_crate',42,42);
+
+    // Barrel (circle)
+    const b = this.add.graphics();
+    b.fillStyle(0x7f8c8d).fillCircle(20,20,20);
+    b.lineStyle(2,0x546e7a).strokeCircle(20,20,20);
+    b.generateTexture('ob_barrel',40,40);
   }
 
   create() {
     this.physics.world.gravity.y = ${gravityY};
 
+    // Ground setup (static)
     this.ground = this.physics.add.staticSprite(400, 560, 'ground');
     this.ground.setDepth(1);
 
-    this.player = this.physics.add.sprite(120, 500, 'runner');
+    // Player
+    this.player = this.physics.add.sprite(120, 500, 'runner1');
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(2);
-    this.player.body.setSize(30, 38).setOffset(5, 6);
+    this.player.body.setSize(24, 36).setOffset(8, 14);
 
     this.physics.add.collider(this.player, this.ground);
 
-    // Subtle run bob animation
-    this.tweens.add({ targets: this.player, y: "-=2", duration: 180, yoyo: true, repeat: -1, ease: "sine.inOut" });
-
+    // Groups
     this.obstacles = this.physics.add.group();
     this.physics.add.collider(this.obstacles, this.ground);
     this.physics.add.overlap(this.player, this.obstacles, this.hitObstacle, null, this);
 
+    // Input
     this.cursors = this.input.keyboard.createCursorKeys();
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
+    // Spawner
     this.spawnTimer = this.time.addEvent({
       delay: ${spawnMs},
       callback: this.spawnObstacle,
@@ -1117,12 +1164,12 @@ class RunnerGame extends Phaser.Scene {
       loop: true
     });
 
+    // UI
     this.scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '24px', color: '#111' });
-
     this.add.text(400, 60, 'Press UP or SPACE to jump', { fontSize: '16px', color: '#333' }).setOrigin(0.5);
-
     this.gameOverText = this.add.text(400, 300, '', { fontSize: '56px', color: '#e53935' }).setOrigin(0.5).setDepth(3);
 
+    // Restart hint
     this.input.keyboard.on('keydown-R', () => { if (this.scene && this.scene.restart) this.scene.restart(); });
     this.add.text(400, 560, 'Press R to restart', { fontSize: '14px', color: '#333' }).setOrigin(0.5);
   }
@@ -1130,35 +1177,60 @@ class RunnerGame extends Phaser.Scene {
   update(time, delta) {
     if (this.gameOver) return;
 
-    // Jump
-    if ((this.cursors.up.isDown || Phaser.Input.Keyboard.JustDown(this.spaceKey)) && this.player.body.touching.down) {
-      this.player.setVelocityY(-460);
+    // Jump only when grounded and a key was pressed
+    const grounded = this.player.body.blocked.down || this.player.body.onFloor?.();
+    if ((Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.spaceKey)) && grounded) {
+      this.player.setVelocityY(-520);
     }
 
-    // Move obstacles left
+    // Update obstacles: constant left velocity
     this.obstacles.children.iterate(ob => {
       if (!ob) return;
-      ob.setVelocityX(-this.speed);
-      if (ob.x < -50) ob.destroy();
+      if (ob.x < -80) ob.destroy();
     });
 
-    // Score increases over time
-    this.score += Math.floor(delta / 16);
+    // Score over time
+    this.score += Math.max(1, Math.floor(delta / 16));
     this.scoreText.setText('Score: ' + this.score);
 
-    // Slightly ramp difficulty
+    // Slight difficulty ramp
     if (time % 2000 < delta) this.speed += 4;
 
-    // Background motion hint
-    this.bgTick += delta * 0.1;
+    // Simple running animation while grounded; hold pose in air
+    if (grounded) {
+      this.runElapsed += delta;
+      if (this.runElapsed >= 120) {
+        this.runElapsed = 0;
+        this.runFrame = (this.runFrame + 1) % 2;
+        this.player.setTexture(this.runFrame === 0 ? 'runner1' : 'runner2');
+      }
+    }
   }
 
   spawnObstacle() {
     if (this.gameOver) return;
-    const obstacle = this.obstacles.create(820, 510, 'obstacle');
-    obstacle.body.setAllowGravity(true);
-    obstacle.setImmovable(true);
+
+    // Randomize obstacle type
+    const types = ['ob_stick', 'ob_cone', 'ob_crate', 'ob_barrel'];
+    const key = Phaser.Utils.Array.GetRandom(types);
+
+    // Create obstacle offscreen at ground level; no gravity, constant velocity
+    const obstacle = this.obstacles.create(840, 0, key);
     obstacle.setDepth(2);
+    obstacle.setImmovable(true);
+    obstacle.body.setAllowGravity(false);
+
+    // Position so bottom rests on floor (floor y = 540 because ground is 40px tall at y=560 center)
+    const displayH = obstacle.displayHeight || obstacle.height || 40;
+    obstacle.setY(540 - displayH / 2);
+
+    // Immediate leftward motion
+    obstacle.setVelocityX(-this.speed);
+
+    // Slight random scale for variety (clamped)
+    const scale = Phaser.Math.Clamp(Phaser.Math.FloatBetween(0.9, 1.2), 0.85, 1.3);
+    obstacle.setScale(scale);
+    obstacle.refreshBody();
   }
 
   hitObstacle() {
@@ -1172,11 +1244,16 @@ class RunnerGame extends Phaser.Scene {
     this.gameOverText.setText('Game Over!\\nScore: ' + this.score);
     this.game.events.emit('gameEnd', this.score);
   }
-}`,
+}
+`,
     assets: [
-      { name: 'runner', type: 'sprite', url: 'data:runner' },
+      { name: 'runner1', type: 'sprite', url: 'data:runner1' },
+      { name: 'runner2', type: 'sprite', url: 'data:runner2' },
       { name: 'ground', type: 'sprite', url: 'data:ground' },
-      { name: 'obstacle', type: 'sprite', url: 'data:obstacle' },
+      { name: 'ob_stick', type: 'sprite', url: 'data:ob_stick' },
+      { name: 'ob_cone', type: 'sprite', url: 'data:ob_cone' },
+      { name: 'ob_crate', type: 'sprite', url: 'data:ob_crate' },
+      { name: 'ob_barrel', type: 'sprite', url: 'data:ob_barrel' },
     ],
     config: {
       width: 800,
