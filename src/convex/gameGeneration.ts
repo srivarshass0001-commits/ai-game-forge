@@ -378,8 +378,8 @@ function generateShooterGame(prompt: string, parameters: any) {
   const playerColor = 0x00ff00;
   const enemyColor = tuning.mainColor;
   const bulletColor = 0xffff00;
-  // LOWERED: enemy base speed
-  const baseEnemySpeed = Math.round(24 * tuning.speedFactor * tuning.difficultyScale + 20);
+  // LOWERED FURTHER: gentler base + smaller ramp envelope
+  const baseEnemySpeed = Math.round(16 * tuning.speedFactor * tuning.difficultyScale + 16);
   const spawnDelayMs = clamp(Math.round(1100 / clamp(tuning.densityFactor, 0.7, 1.5)), 450, 1400);
 
   return {
@@ -417,6 +417,11 @@ class ShooterGame extends Phaser.Scene {
   }
 
   create() {
+    // Ensure speed is reset on restart
+    this.enemySpeed = ${baseEnemySpeed};
+    this.score = 0;
+    this.gameOver = false;
+
     this.player = this.physics.add.sprite(400, 550, 'player');
     this.player.setCollideWorldBounds(true);
 
@@ -425,6 +430,7 @@ class ShooterGame extends Phaser.Scene {
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.rKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
     this.input.keyboard.addCapture([Phaser.Input.Keyboard.KeyCodes.UP, Phaser.Input.Keyboard.KeyCodes.SPACE]);
 
     this.enemyTimer = this.time.addEvent({
@@ -441,6 +447,7 @@ class ShooterGame extends Phaser.Scene {
 
     this.gameOverText = this.add.text(400, 300, '', { fontSize: '48px', color: '#e53935' }).setOrigin(0.5);
 
+    // Keep the existing hint listener for R
     this.input.keyboard.on('keydown-R', () => { if (this.scene && this.scene.restart) this.scene.restart(); });
     this.add.text(400, 560, 'Press R to restart', { fontSize: '14px', color: '#333' }).setOrigin(0.5);
   }
@@ -460,6 +467,11 @@ class ShooterGame extends Phaser.Scene {
       this.shoot();
     }
 
+    // Extra reliable restart with R (in case the event emitter misses)
+    if (Phaser.Input.Keyboard.JustDown(this.rKey)) {
+      if (this.scene && this.scene.restart) this.scene.restart();
+    }
+
     this.bullets.children.entries.forEach(bullet => {
       if (bullet.y < 0) bullet.destroy();
     });
@@ -471,18 +483,18 @@ class ShooterGame extends Phaser.Scene {
 
   shoot() {
     const bullet = this.bullets.create(this.player.x, this.player.y - 20, 'bullet');
-    // Match the enemy fall speed (same cap) for consistent pacing
-    bullet.setVelocityY(-Math.min(this.enemySpeed, 160));
+    // EXACT MATCH: Bullet speed equals current enemy fall speed, same cap (lowered)
+    bullet.setVelocityY(-Math.min(this.enemySpeed, 140));
   }
 
   spawnEnemy() {
     if (this.gameOver) return;
     const x = Phaser.Math.Between(50, 750);
     const enemy = this.enemies.create(x, 0, 'enemy');
-    // CLAMP: prevent enemies from becoming too fast
-    enemy.setVelocityY(Math.min(this.enemySpeed, 160));
-    // GENTLER RAMP: slower increase over time
-    this.enemySpeed += 1;
+    // EXACT MATCH: Enemy fall speed capped to the same number used by bullets
+    enemy.setVelocityY(Math.min(this.enemySpeed, 140));
+    // Even gentler ramp over time
+    this.enemySpeed += 0.75;
   }
 
   hitEnemy(bullet, enemy) {
@@ -499,7 +511,7 @@ class ShooterGame extends Phaser.Scene {
   endGame() {
     this.gameOver = true;
     this.physics.pause();
-    this.enemyTimer.destroy();
+    this.enemyTimer?.destroy();
     this.gameOverText.setText('Game Over!\\nScore: ' + this.score);
     this.game.events.emit('gameEnd', this.score);
   }
