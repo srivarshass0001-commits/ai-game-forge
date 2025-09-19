@@ -471,7 +471,8 @@ class ShooterGame extends Phaser.Scene {
 
   shoot() {
     const bullet = this.bullets.create(this.player.x, this.player.y - 20, 'bullet');
-    bullet.setVelocityY(-450);
+    // Match the enemy fall speed (same cap) for consistent pacing
+    bullet.setVelocityY(-Math.min(this.enemySpeed, 160));
   }
 
   spawnEnemy() {
