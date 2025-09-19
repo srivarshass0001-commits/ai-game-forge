@@ -1,0 +1,6 @@
+      .trim();
+    try {
+      return JSON.parse(jsonStr);
+    } catch (e) {
+      return null;
+    }

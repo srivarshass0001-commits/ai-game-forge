@@ -51,20 +51,6 @@ function pickBackgroundColor(theme: string): number {
   return 0xf9fafb; // default: near-white
 }
 
-function isHumanCharacterRequested(prompt: string): boolean {
-  const p = prompt.toLowerCase();
-  return (
-    p.includes("human") ||
-    p.includes("boy") ||
-    p.includes("girl") ||
-    p.includes("man") ||
-    p.includes("woman") ||
-    p.includes("kid") ||
-    p.includes("runner human") ||
-    p.includes("person")
-  );
-}
-
 function difficultyScaleOf(diff: string): number {
   const d = diff.toLowerCase();
   if (d === "easy") return 0.75;
@@ -74,41 +60,54 @@ function difficultyScaleOf(diff: string): number {
   return 1.0;
 }
 
+// Add: allow analyzer overrides from an LLM classifier
 function analyzePrompt(prompt: string, parameters: any) {
+  const overrides = parameters?.__overrides ?? {};
   const h = hashPrompt(prompt);
   const pLower = prompt.toLowerCase();
 
-  // Base factors from difficulty
-  let difficultyScale = difficultyScaleOf(parameters?.difficulty ?? "medium");
+  // Base factors from difficulty (allow override)
+  let difficultyScale = overrides.difficultyScale ?? difficultyScaleOf(parameters?.difficulty ?? "medium");
 
   // Prompt hints
-  if (pLower.includes("brutal") || pLower.includes("insane") || pLower.includes("hard")) {
-    difficultyScale *= 1.15;
-  }
-  if (pLower.includes("chill") || pLower.includes("casual") || pLower.includes("easy")) {
-    difficultyScale *= 0.9;
+  if (!overrides.difficultyScale) {
+    if (pLower.includes("brutal") || pLower.includes("insane") || pLower.includes("hard")) {
+      difficultyScale *= 1.15;
+    }
+    if (pLower.includes("chill") || pLower.includes("casual") || pLower.includes("easy")) {
+      difficultyScale *= 0.9;
+    }
   }
 
-  // Speed & density factors derived from hash + keywords
-  let speedFactor = 0.8 + ((h % 41) / 100); // 0.8 - 1.21 range
-  let densityFactor = 0.8 + (((Math.floor(h / 7)) % 41) / 100);
-  if (pLower.includes("fast") || pLower.includes("speed") || pLower.includes("rapid")) speedFactor *= 1.15;
-  if (pLower.includes("slow") || pLower.includes("relax")) speedFactor *= 0.9;
-  if (pLower.includes("many") || pLower.includes("tons") || pLower.includes("swarm")) densityFactor *= 1.2;
-  if (pLower.includes("few") || pLower.includes("minimal")) densityFactor *= 0.85;
+  // Speed & density (allow override)
+  let speedFactor =
+    overrides.speedFactor ??
+    (0.8 + ((h % 41) / 100)); // 0.8 - 1.21 range
+  let densityFactor =
+    overrides.densityFactor ??
+    (0.8 + (((Math.floor(h / 7)) % 41) / 100));
+
+  if (overrides.speedFactor == null) {
+    if (pLower.includes("fast") || pLower.includes("speed") || pLower.includes("rapid")) speedFactor *= 1.15;
+    if (pLower.includes("slow") || pLower.includes("relax")) speedFactor *= 0.9;
+  }
+  if (overrides.densityFactor == null) {
+    if (pLower.includes("many") || pLower.includes("tons") || pLower.includes("swarm")) densityFactor *= 1.2;
+    if (pLower.includes("few") || pLower.includes("minimal")) densityFactor *= 0.85;
+  }
 
   speedFactor = clamp(speedFactor, 0.6, 1.6);
   densityFactor = clamp(densityFactor, 0.6, 1.6);
 
-  // Theme color from parameters or prompt
-  const themeText = parameters?.theme ?? "";
+  // Theme from overrides -> parameters -> prompt
+  const themeText = overrides.theme ?? parameters?.theme ?? "";
   const themeFromPrompt =
-    pLower.includes("space") ? "space" :
-    pLower.includes("forest") || pLower.includes("nature") ? "nature" :
-    pLower.includes("retro") ? "retro" :
-    pLower.includes("fantasy") ? "fantasy" :
-    pLower.includes("cyber") ? "cyberpunk" :
-    themeText;
+    themeText ||
+    (pLower.includes("space") ? "space" :
+     pLower.includes("forest") || pLower.includes("nature") ? "nature" :
+     pLower.includes("retro") ? "retro" :
+     pLower.includes("fantasy") ? "fantasy" :
+     pLower.includes("cyber") ? "cyberpunk" : "");
 
   const mainColor = pickThemeColor(themeFromPrompt);
   const bgColor = pickBackgroundColor(themeFromPrompt);
@@ -125,6 +124,92 @@ function analyzePrompt(prompt: string, parameters: any) {
     theme: themeFromPrompt || "default",
     bgColor,
   };
+}
+
+// Augment: consider overrides for human character request
+function isHumanCharacterRequested(prompt: string, overrides?: { humanCharacter?: boolean }) {
+  if (overrides && typeof overrides.humanCharacter === "boolean") return overrides.humanCharacter;
+  const p = prompt.toLowerCase();
+  return (
+    p.includes("human") ||
+    p.includes("boy") ||
+    p.includes("girl") ||
+    p.includes("man") ||
+    p.includes("woman") ||
+    p.includes("kid") ||
+    p.includes("runner human") ||
+    p.includes("person")
+  );
+}
+
+// Add: Optional LLM-assisted classifier via OpenRouter. Safe – only returns structured metadata, not executable code.
+async function llmAnalyzePrompt(prompt: string, parameters: any): Promise<{
+  gameType?: "runner" | "platformer" | "shooter" | "puzzle" | "arcade" | "tictactoe";
+  humanCharacter?: boolean;
+  theme?: string;
+  speedFactor?: number;
+  densityFactor?: number;
+  difficultyScale?: number;
+} | null> {
+  try {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) return null;
+
+    // Dynamically import to avoid requiring the dependency if unused
+    const { default: OpenAI } = await import("openai");
+    const openai = new OpenAI({
+      apiKey,
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "X-Title": "PromptPlay",
+      },
+    });
+
+    const sys = [
+      "You classify a short game prompt into a JSON with fields:",
+      "{",
+      '"gameType": one of ["runner","platformer","shooter","puzzle","arcade","tictactoe"],',
+      '"humanCharacter": boolean (true if the prompt asks for a human and it should be a lively cartoon kid),',
+      '"theme": short theme string (e.g. space, fantasy, cyberpunk, nature, retro, ocean, neon, candy, sunset, pastel, forest, desert, city),',
+      '"speedFactor": number in [0.6, 1.6],',
+      '"densityFactor": number in [0.6, 1.6],',
+      '"difficultyScale": number in [0.6, 1.6]',
+      "}",
+      "Rules:",
+      "- Prefer 'runner' when user asks for running/endless/dash.",
+      "- Prefer 'tictactoe' when mentioned.",
+      "- Only return raw JSON. No markdown, no commentary.",
+    ].join("\n");
+
+    const userContent = JSON.stringify({
+      prompt,
+      parameters,
+    });
+
+    const completion = await openai.chat.completions.create({
+      model: "anthropic/claude-3-haiku",
+      messages: [
+        { role: "system", content: sys },
+        { role: "user", content: userContent },
+      ],
+      temperature: 0.2,
+      max_tokens: 300,
+    });
+
+    const raw = completion.choices?.[0]?.message?.content ?? "";
+    // Strip optional markdown code fences (
+    const jsonStr = raw.trim().replace(/^
+    \s*`.*\s*`/gm, "").trim();
+    
+    try {
+      return JSON.parse(jsonStr);
+    } catch (e) {
+      return null;
+    }
+  } catch (e) {
+    console.error("LLM analysis failed:", e);
+    return null;
+  }
 }
 
 // Mock AI game generation - in a real app, this would call OpenAI/Claude
